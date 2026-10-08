@@ -26,7 +26,7 @@ from worldengine import robot as RB
 
 DEFAULTS = {"ds": 0.02, "v_draw": 0.25, "v_travel": 0.6, "qd_max": 1.5, "tol": 1e-5, "chord_tol": 0.002,
             "lam": 0.02, "iters": 60, "link_clearance": 0.04,
-            "pen_lift_ik": 0.0, "enforce_limits": True}
+            "pen_lift_ik": 0.0, "enforce_limits": True, "continuous": False}
 
 
 # ---------------------------------------------------------------- strokes
@@ -180,17 +180,23 @@ def plan(chain: dict, strokes, plane: dict, q_home=None, opts=None) -> dict:
         T.append(T[-1] + dt); Q.append(qn); PEN.append(pen); TARGET.append(p3); STROKE.append(sid)
         q = qn
 
+    cont = o["continuous"]                                   # one unbroken line: travel between strokes is drawn too
     for sid, poly in enumerate(strokes):
         pts = resample(poly, o["ds"])
-        start_up = to3(plane, pts[0], lift)
-        prev_up = TARGET[-1]
-        for k in range(1, max(2, math.ceil(math.dist(prev_up, start_up) / (4 * o["ds"]))) + 1):   # travel, pen up
-            a = k / max(2, math.ceil(math.dist(prev_up, start_up) / (4 * o["ds"])))
-            go([prev_up[i] + (start_up[i] - prev_up[i]) * a for i in range(3)], 0, sid, o["v_travel"])
-        go(to3(plane, pts[0]), 1, sid, o["v_draw"] / 4)                                            # pen down
+        first, last = sid == 0, sid == len(strokes) - 1
+        drawn_travel = cont and not first
+        start = to3(plane, pts[0], 0.0 if drawn_travel else lift)
+        prev = TARGET[-1]
+        n_tr = max(2, math.ceil(math.dist(prev, start) / ((1 if drawn_travel else 4) * o["ds"])))
+        for k in range(1, n_tr + 1):                          # travel: pen up, or pen down when continuous
+            a = k / n_tr
+            go([prev[i] + (start[i] - prev[i]) * a for i in range(3)], 1 if drawn_travel else 0, sid, o["v_draw"] if drawn_travel else o["v_travel"])
+        if not drawn_travel:
+            go(to3(plane, pts[0]), 1, sid, o["v_draw"] / 4)                                         # pen down
         for uv in pts[1:]:
             go(to3(plane, uv), 1, sid, o["v_draw"])
-        go(to3(plane, pts[-1], lift), 0, sid, o["v_draw"] / 4)                                     # pen up
+        if not cont or last:
+            go(to3(plane, pts[-1], lift), 0, sid, o["v_draw"] / 4)                                  # pen up
     traj = {"t": T, "q": Q, "pen": PEN, "target": TARGET, "stroke": STROKE}
     return {"chain": chain, "plane": plane, "strokes": strokes, "opts": o, "trajectory": traj,
             "verify": verify(chain, traj, o, unreachable)}
@@ -240,6 +246,8 @@ def verify(chain: dict, traj: dict, o=DEFAULTS, unreachable=None) -> dict:
             mid = [(a + b) / 2 for a, b in zip(TGT[i - 1], TGT[i])]
             chord = max(chord, math.dist(RB.K.forward_kinematics(rb, qm), mid))
     viol = RB.K.check_trajectory(rb, Q)
+    v_pen = max((math.dist(RB.K.forward_kinematics(rb, Q[i]), RB.K.forward_kinematics(rb, Q[i - 1])) / (traj["t"][i] - traj["t"][i - 1])
+                 for i in range(1, len(Q)) if PEN[i] and PEN[i - 1]), default=0.0)
     qd = max((max(abs(a - b) for a, b in zip(Q[i], Q[i - 1])) / (traj["t"][i] - traj["t"][i - 1]) for i in range(1, len(Q))), default=0.0)
     coll, min_gap = [], float("inf")
     for i, q in enumerate(Q):                                          # every sample; links that are not neighbours
@@ -251,10 +259,11 @@ def verify(chain: dict, traj: dict, o=DEFAULTS, unreachable=None) -> dict:
                     coll.append({"step": i, "links": [a, b], "gap_m": d})
     return {
         "samples": len(Q), "pen_down_samples": sum(PEN), "duration_s": traj["t"][-1],
+        "pen_lifts": sum(1 for i in range(1, len(PEN)) if PEN[i - 1] and not PEN[i] and any(PEN[i:])),   # interruptions only
         "stroke_err_max_m": stroke_err, "chord_err_max_m": chord, "chord_tol_m": o["chord_tol"],
         "unreachable": len(unreachable or []), "unreachable_first": (unreachable or [None])[0],
         "limit_violations": len(viol), "limit_violation_first": list(viol[0]) if viol else None,
-        "qd_max_measured": qd, "qd_max_allowed": o["qd_max"],
+        "qd_max_measured": qd, "qd_max_allowed": o["qd_max"], "pen_speed_max_mps": v_pen,
         "self_collisions": len(coll), "min_link_gap_m": None if min_gap == float("inf") else min_gap,
         "pass": stroke_err <= 1e-3 and chord <= o["chord_tol"] and not unreachable and not viol and not coll and qd <= o["qd_max"] * (1 + 1e-9),
     }
@@ -265,7 +274,7 @@ def _r(v, nd=7):
     return [_r(x, nd) for x in v] if isinstance(v, list) else round(v, nd)
 
 
-def world(p: dict, name: str = "그림 그리는 로봇 (데모)", at=(6.0, 6.0), table_h: float = 0.4) -> dict:
+def world(p: dict, name: str = "그림 그리는 로봇 (데모)", at=(6.0, 6.0), table_h: float = 0.4, concepts=None, effects=None) -> dict:
     """A gallery world with the arm on a low platform over a sheet of paper. The plan's verification travels with it."""
     tr = p["trajectory"]
     xs = [t[0] for t in tr["target"]] + [0.0]
@@ -298,18 +307,21 @@ def world(p: dict, name: str = "그림 그리는 로봇 (데모)", at=(6.0, 6.0)
         },
         "player": {"spawn": [ax + 1.9, ay - 3.5], "yaw_deg": 90, "eye": "adult"},
         "controls": {"default": "orbit"},
-        "verify": {"V-16": p["verify"], "planner": {k: v for k, v in p["opts"].items() if k != "q_rest"}},
+        "concepts": concepts or [],
+        "verify": {"V-16": p["verify"], "planner": {k: v for k, v in p["opts"].items() if k != "q_rest"},
+                   "concept_effects": effects or []},
     }
 
 
-def report_md(p: dict, title: str) -> str:
+def report_md(p: dict, title: str, effects=None) -> str:
     v = p["verify"]
     rows = [("의도한 획 ↔ 시뮬레이션 손끝 최대 오차 (표본점)", "%.4f mm" % (v["stroke_err_max_m"] * 1e3), "≤ 1 mm"),
             ("표본 사이 관절 보간 중점 오차 (chord)", "%.4f mm" % (v["chord_err_max_m"] * 1e3), "≤ %.1f mm" % (v["chord_tol_m"] * 1e3)),
             ("도달 못 한 점", str(v["unreachable"]), "0"),
             ("관절 한계 위반 (reference check_trajectory)", str(v["limit_violations"]), "0"),
             ("자기 충돌 (이웃 아닌 링크 간격 < %.0f mm)" % (p["opts"]["link_clearance"] * 1e3), str(v["self_collisions"]), "0"),
-            ("최대 관절 속도", "%.3f rad/s" % v["qd_max_measured"], "≤ %.1f rad/s" % v["qd_max_allowed"])]
+            ("최대 관절 속도", "%.3f rad/s" % v["qd_max_measured"], "≤ %.1f rad/s" % v["qd_max_allowed"]),
+            ("그리는 도중 펜 떼기", str(v["pen_lifts"]), "(개념이 정하면 그 값)")]
     L = ["# V-16 " + title, "", "- 로봇: `%s` (%s), 관절 %d개 · 표본 %d · 펜 내림 %d · 재생 %.1f s" % (
         p["chain"]["name"], p["chain"].get("source", ""), len(RB.active(p["chain"])), v["samples"], v["pen_down_samples"], v["duration_s"]),
          "- 판정: **%s**" % ("PASS" if v["pass"] else "FAIL"), "", "| 항목 | 측정 | 기준 |", "|---|---|---|"]
@@ -318,6 +330,11 @@ def report_md(p: dict, title: str) -> str:
         L.append("\n첫 도달 실패: %s" % v["unreachable_first"])
     if v["limit_violation_first"]:
         L.append("\n첫 한계 위반: %s" % v["limit_violation_first"])
+    if effects:
+        L += ["", "## 개념 규칙: 적용과 측정", "", "| 개념 | 규칙 | 값 | 적용 | 측정 | 지킴 | 설명 |", "|---|---|---|---|---|---|---|"]
+        fmt = lambda m: "—" if m is None else ("%.4g" % m if isinstance(m, float) else str(m))
+        L += ["| %s | `%s` | %s | %s | %s | %s | %s |" % (e["concept"], e["param"], e["value"], "예" if e["applied"] else "**아니오**", fmt(e.get("measured")),
+              {True: "예", False: "**아니오**", None: "—"}[e.get("met")], e["note"]) for e in effects]
     L += ["", "측정 모델 = kinematics/ 의 reference FK. 브라우저 쪽 FK(robot/kinematics.js)는 같은 test_vectors 600개에서 1e-9 m 이내로 일치하는지 따로 검사한다.",
           "펜 들기는 관절이 아니라 도구 동작이다 (평면 팔은 평면을 벗어날 수 없다)."]
     return "\n".join(L) + "\n"

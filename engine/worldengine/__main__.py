@@ -75,6 +75,7 @@ def main(argv=None) -> int:
     a.add_argument("--center", default="1.9,0"); a.add_argument("--views", default="aerial,top")
     a.add_argument("--out", default=str(OUT)); a.add_argument("--w", type=int, default=1280); a.add_argument("--h", type=int, default=800)
     a.add_argument("--save-world", action="store_true", help="also write worlds/drawing_robot.world.json")
+    a.add_argument("--concept", default="klee", help="klee (demo concept card) | none | path to a JSON list of concept cards")
     a = ap.parse_args(argv)
     if a.cmd == "draw":
         return _draw(a)
@@ -136,15 +137,21 @@ def _draw(a) -> int:
         strokes = [[[c[0] + (x - mx) * a.scale, c[1] - (y - my) * a.scale] for x, y in s] for s in raw]   # SVG y is down
     else:
         strokes = D.demo_strokes(tuple(c))
+    from worldengine import concept as CP
+    concepts = {"klee": [CP.KLEE_WALK], "none": []}.get(a.concept)
+    if concepts is None:
+        concepts = json.loads(Path(a.concept).read_text(encoding="utf-8"))
+    effects, opts, strokes = CP.apply(concepts, "arm", strokes)
     q0, err = D.home(ch, [c[0], c[1], 0.0], [-0.6, 0.7, 0.6][:len(RB.active(ch))] + [0.0] * max(0, len(RB.active(ch)) - 3))
-    p = D.plan(ch, strokes, {"origin": [0, 0, 0], "u": [1, 0, 0], "v": [0, 1, 0]}, q_home=q0)
+    p = D.plan(ch, strokes, {"origin": [0, 0, 0], "u": [1, 0, 0], "v": [0, 1, 0]}, q_home=q0, opts=opts)
+    concept_ok = CP.measure(effects, p["verify"])
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     stem = "draw_" + (Path(a.svg).stem if a.svg else "demo")
-    w = D.world(p)
+    w = D.world(p, concepts=concepts, effects=effects)
     bad = WD.check(w)
     if bad:
         print("세계 파일 오류:", bad); return 2
-    md = out / (stem + "_V16.md"); md.write_text(D.report_md(p, stem), encoding="utf-8")
+    md = out / (stem + "_V16.md"); md.write_text(D.report_md(p, stem, effects), encoding="utf-8")
     print("산출물:", WD.save(w, out / (stem + ".world.json"))); print("산출물:", md)
     if a.save_world:
         print("산출물:", WD.save(w, ENGINE / "worlds" / "drawing_robot.world.json"))
@@ -156,7 +163,9 @@ def _draw(a) -> int:
             print(("산출물: %s" % png) if r["ok"] else "**그림 없음** %s: %s" % (v, r["reason"]))
     print("=== 보고 ===")
     print(md.read_text(encoding="utf-8"))
-    return 0 if p["verify"]["pass"] else 1
+    if not concept_ok:
+        print("**개념 규칙을 지키지 못했다**: " + ", ".join(e["param"] for e in effects if e["met"] is False))
+    return 0 if p["verify"]["pass"] and concept_ok else 1
 
 
 def _serve(a) -> int:

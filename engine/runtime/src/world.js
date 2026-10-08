@@ -53,9 +53,37 @@ export function check(w, knownTypes = null) {
     if (pl.spawn !== undefined && !isVec(pl.spawn, 2)) bad.push('player.spawn must be [x,y]');
     if (pl.eye !== undefined && !(pl.eye in { ...EYE_HEIGHTS, ...(pl.eye_heights || {}) })) bad.push(`player.eye unknown: "${pl.eye}"`);
   }
+  checkConcepts(w, ids, bad);
   const mode = w.controls && w.controls.default;
   if (mode !== undefined && !['orbit', 'walk'].includes(mode)) bad.push(`controls.default must be orbit|walk: "${mode}"`);
   return bad;
+}
+
+export const SOURCE_KINDS = ['quote', 'paraphrase', 'own', 'interview'];
+
+// Concept cards (the Concept ingredient): same rules and messages as world.py _check_concepts.
+function checkConcepts(w, ids, bad) {
+  const cs = w.concepts;
+  if (cs === undefined || cs === null) return;
+  if (!Array.isArray(cs)) { bad.push('concepts must be a list'); return; }
+  const seen = new Set();
+  cs.forEach((c, i) => {
+    const p = `concepts[${i}]`;
+    if (!c || typeof c !== 'object' || Array.isArray(c)) { bad.push(`${p} must be an object`); return; }
+    if (typeof c.id !== 'string' || !c.id) bad.push(`${p}.id must be a non-empty string`);
+    else if (seen.has(c.id)) bad.push(`${p}.id duplicated: "${c.id}"`);
+    else seen.add(c.id);
+    for (const k of ['title', 'statement']) if (typeof c[k] !== 'string' || !c[k]) bad.push(`${p}.${k} must be a non-empty string`);
+    const src = c.sources;
+    if (!Array.isArray(src) || !src.length) bad.push(`${p}.sources must be a non-empty list (say where the idea comes from, even if it is your own)`);
+    else src.forEach((so, j) => {
+      if (!so || typeof so !== 'object' || !so.who) bad.push(`${p}.sources[${j}].who is required`);
+      else if (!SOURCE_KINDS.includes(so.kind)) bad.push(`${p}.sources[${j}].kind must be one of ${SOURCE_KINDS.join('|')}: ${JSON.stringify(so.kind ?? null)}`);
+      else if (so.kind === 'quote' && !so.where) bad.push(`${p}.sources[${j}] is a quote: where (book/page/url) is required`);
+    });
+    (c.rules || []).forEach((r, j) => { if (!r || typeof r !== 'object' || typeof r.param !== 'string' || !('value' in r)) bad.push(`${p}.rules[${j}] needs param and value`); });
+    for (const d of c.drives || []) if (!ids.has(d)) bad.push(`${p}.drives "${d}" is not an entity id`);
+  });
 }
 
 // Extent of everything with a position (used when bounds is absent). Rough on purpose: for camera framing only.

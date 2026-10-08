@@ -32,8 +32,18 @@ python3 -m worldengine draw --svg my.svg --scale 0.002   # M/L/H/V/Z 경로만. 
 | 검증 | `draw.verify` | 기준 FK 로 획 오차 · 표본 사이 관절 보간 중점 오차 · 도달 실패 · 기준 `check_trajectory` 한계 위반 · 이웃 아닌 링크 간격(자기 충돌) · 관절 속도 |
 | 재생 | `robot.arm` | JS FK 가 기준 test_vectors 600개와 1e-9 m 이내로 일치 (node 테스트) · 브라우저 안에서 잉크 ↔ 의도한 획 비교 (self-test) |
 
-데모 측정 (`worlds/drawing_robot.world.json`, planar_3_dof, 표본 862, 재생 54.7 s): 획 오차 최대 0.010 mm · 보간 중점 0.039 mm · 도달 실패 0 · 한계 위반 0 · 자기 충돌 0 (최소 링크 간격 0.99 m) · 관절 속도 최대 0.58 rad/s (한계 1.5, 기본값 — URDF velocity 는 기준 파서가 읽지 않는다). 브라우저 잉크 ↔ 의도한 획 최대 0.010 mm.
+데모 측정 (개념 카드 없이, planar_3_dof, 표본 862, 재생 54.7 s): 획 오차 최대 0.010 mm · 보간 중점 0.039 mm · 도달 실패 0 · 한계 위반 0 · 자기 충돌 0 (최소 링크 간격 0.99 m) · 관절 속도 최대 0.58 rad/s (한계 1.5, 기본값 — URDF velocity 는 기준 파서가 읽지 않는다). 브라우저 잉크 ↔ 의도한 획 최대 0.010 mm. 저장소의 `worlds/drawing_robot.world.json` 은 개념 카드를 적용한 판이다 (아래).
 일부러 한계를 넘는 그림(joint1 을 [−1.2, −0.9] rad 로 좁힘): 한계를 지키며 계획하면 도달 실패로, 한계를 무시하고 계획하면 기준 검사기가 위반 134건으로 잡는다 — 둘 다 FAIL. 6축 팔(arm_6_dof)도 같은 계획기로 사각형을 그려 통과.
+
+### 개념 카드 (다섯 재료 중 개념)
+
+세계의 `concepts` 에 카드를 단다: `id · title · statement · sources[{who, kind: quote|paraphrase|own|interview, where, note}] · rules[{param, value, why}] · drives[엔티티 id]`.
+출처 없는 개념, 출처(where) 없는 인용, 없는 엔티티를 가리키는 drives 는 JS·Python 검사가 같은 문장으로 거부한다.
+규칙은 `worldengine/concept.py` 가 계획기 설정으로 바꾸고(지원: `pen.lifts`=0, `draw.v_draw`, `draw.max_strokes`), **끝난 궤적에서 다시 측정해** 지켰는지 적는다. 모르는 규칙은 "적용 안 됨 + 이유"로 남는다.
+
+데모 카드 "산책하는 선" — Paul Klee 의 널리 퍼진 의역(원문 인용 아님, 그렇게 표시)을 데모가 규칙 둘로 번역: 펜을 떼지 않는다, 0.15 m/s 로 천천히.
+측정: 개념 없음 → 그리는 도중 펜 떼기 2회 · 54.7 s / 개념 적용 → 0회 · 97.0 s · 최대 펜 속도 0.15 m/s, 두 경우 모두 V-16 통과 (획 오차 0.0099 mm).
+링크에 `&card=1` 을 붙이면 카드를 연 채로 시작한다.
 
 좌표: 미터, z 위, x 동, y 북. three.js 의 y-위로 바꾸는 곳은 `engine.js` 의 root 그룹 한 곳뿐.
 
