@@ -1,0 +1,22 @@
+name: engine
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install chrome-headless-shell (exact viewport for screenshots)
+        run: |
+          out=$(npx --yes @puppeteer/browsers@2.6.1 install chrome-headless-shell@stable --path "$RUNNER_TEMP/browsers")
+          echo "$out"
+          echo "WE_CHROMIUM=$(echo "$out" | tail -1 | awk '{print $2}')" >> "$GITHUB_ENV"
+      - name: Unit + headless render tests
+        working-directory: engine
+        run: |
+          echo "browser: $WE_CHROMIUM"
+          python -m unittest discover -s tests -v
