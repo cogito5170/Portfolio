@@ -1,0 +1,14 @@
+# CH-04 starting list (reviewed by people before any public showing; a world can add terms in character.blocklist).
+# One term per line, matched case-insensitively as a substring after removing spaces.
+씨발
+시발
+ㅅㅂ
+개새끼
+병신
+좆
+섹스
+야동
+fuck
+shit
+porn
+nigger

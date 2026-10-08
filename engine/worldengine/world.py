@@ -83,6 +83,7 @@ def check(w, known_types=None) -> "list[str]":
             bad.append('player.eye unknown: "%s"' % pl["eye"])
     _check_concepts(w, ids, bad)
     _check_rules(w, bad)
+    _check_experience(w, bad)
     mode = (w.get("controls") or {}).get("default")
     if mode is not None and mode not in ("orbit", "walk"):
         bad.append('controls.default must be orbit|walk: "%s"' % mode)
@@ -175,6 +176,76 @@ def _check_rules(w, bad):
     fk = w.get("forked_from")
     if fk is not None and not (isinstance(fk, dict) and isinstance(fk.get("world"), str) and fk.get("world")):
         bad.append("forked_from.world must name the parent world")
+
+
+TRIGGER_ON = ("tap", "near")
+ACTIONS = ("play", "toggle", "caption", "tour", "talk")
+
+
+def _check_experience(w, bad):
+    """Experience runtime (XR-03/04/05/11, CH): physics rules, tours, triggers, and captions for every sound and
+    every character line -- a visitor who cannot hear must still get the work (XR-11)."""
+    ph = (w.get("rules") or {}).get("physics") if isinstance(w.get("rules"), dict) else None
+    if ph is not None:
+        if not isinstance(ph, dict):
+            bad.append("rules.physics must be an object")
+        else:
+            g, ts = ph.get("gravity_mps2"), ph.get("time_scale")
+            if g is not None and not (_num(g) and 0 <= g <= 100):
+                bad.append("rules.physics.gravity_mps2 must be in [0,100]: %s" % _js(g))
+            if ts is not None and not (_num(ts) and 0 < ts <= 10):
+                bad.append("rules.physics.time_scale must be in (0,10]: %s" % _js(ts))
+    tours = w.get("tours")
+    tour_ids = set()
+    if tours is not None:
+        if not isinstance(tours, list):
+            bad.append("tours must be a list")
+        else:
+            for i, t in enumerate(tours):
+                p = "tours[%d]" % i
+                if not isinstance(t, dict) or not isinstance(t.get("id"), str) or not t.get("id"):
+                    bad.append("%s.id must be a non-empty string" % p); continue
+                tour_ids.add(t["id"])
+                stops = t.get("stops")
+                if not isinstance(stops, list) or not stops:
+                    bad.append("%s.stops must be a non-empty list" % p); continue
+                for j, st in enumerate(stops):
+                    q = "%s.stops[%d]" % (p, j)
+                    if not isinstance(st, dict) or not (_vec(st.get("pos"), 3) and _vec(st.get("target"), 3)):
+                        bad.append("%s needs pos and target" % q)
+                    elif not (_num(st.get("dwell_s")) and st["dwell_s"] > 0):
+                        bad.append("%s.dwell_s must be > 0" % q)
+                    elif not isinstance(st.get("caption"), str) or not st["caption"]:
+                        bad.append("%s.caption is required (자막 없는 투어 정지점)" % q)
+
+    def walk(es, path):
+        for i, e in enumerate(es or []):
+            if not isinstance(e, dict):
+                continue
+            q = "%s[%d]" % (path, i)
+            if e.get("type") == "sound" and not (isinstance(e.get("caption"), str) and e["caption"]):
+                bad.append("%s is a sound without caption (소리마다 자막이 필요하다)" % q)
+            if e.get("type") == "character":
+                lines = e.get("lines")
+                if not isinstance(lines, list) or not lines or not all(isinstance(x, str) and x for x in lines):
+                    bad.append("%s.lines must be a non-empty list of strings (대사가 곧 자막이다)" % q)
+            for k, tr in enumerate(e.get("triggers") or []):
+                r = "%s.triggers[%d]" % (q, k)
+                if not isinstance(tr, dict) or tr.get("on") not in TRIGGER_ON:
+                    bad.append("%s.on must be tap|near" % r); continue
+                if tr["on"] == "near" and not (_num(tr.get("radius")) and tr["radius"] > 0):
+                    bad.append("%s.radius must be > 0 for near" % r)
+                for m, a in enumerate(tr.get("do") or []):
+                    act = a.get("action") if isinstance(a, dict) else None
+                    if act not in ACTIONS:
+                        bad.append("%s.do[%d].action must be one of %s: %s" % (r, m, "|".join(ACTIONS), _js(act)))
+                    elif act == "caption" and not (isinstance(a.get("text"), str) and a["text"]):
+                        bad.append("%s.do[%d] caption needs text" % (r, m))
+                    elif act == "tour" and a.get("tour") not in tour_ids:
+                        bad.append('%s.do[%d] tour "%s" does not exist' % (r, m, a.get("tour")))
+            if isinstance(e.get("children"), list):
+                walk(e["children"], q + ".children")
+    walk(w.get("entities"), "entities")
 
 
 def from_scene(sc: dict) -> dict:

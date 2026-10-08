@@ -12,6 +12,10 @@ import { Registry } from './registry.js';
 import { Library } from './materials.js';
 import { WalkControls, pose } from './controls/walk.js';
 import { Joystick } from './controls/joystick.js';
+import { AudioManager } from './audio.js';
+import { physics, tourAt } from './physics.js';
+import { Interaction } from './interact.js';
+import { Captions } from './ui/captions.js';
 
 export const T3 = (x, y, z) => new THREE.Vector3(x, z, -y);            // world (z up) -> three (y up)
 export const FROM3 = v => [v.x, -v.z, v.y];
@@ -32,7 +36,8 @@ export class Engine {
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.style.touchAction = 'none';               // we handle touch gestures ourselves
     this.camera = new THREE.PerspectiveCamera(50, this.size[0] / this.size[1], 0.05, 5000);
-    this.t = 0; this.listeners = {}; this.mode = 'none';
+    this.t = 0; this.realTime = 0; this.listeners = {}; this.mode = 'none';
+    this.captionLog = []; this.captions = new Captions(container); this.tour = null; this.lowspec = false;
     if (!headless) addEventListener('resize', () => this.resize(innerWidth, innerHeight));
   }
 
@@ -53,14 +58,19 @@ export class Engine {
     this.scene = new THREE.Scene();
     this.root = new THREE.Group(); this.root.rotation.x = -Math.PI / 2; this.scene.add(this.root);
     this.animated = []; this.colliders = [];
+    this.phys = physics(world);
+    if (!this.audio) this.audio = new AudioManager(this);
+    this.audio.sources = [];
     this._environment(world.environment || {});
     let seed = 12345;
-    const ctx = { THREE, mats: this.mats, world, view: view || 'aerial', extent: this.extent, rnd: () => ((seed = (seed * 16807) % 2147483647) / 2147483647) };
+    const ctx = { THREE, mats: this.mats, world, view: view || 'aerial', extent: this.extent, engine: this, audio: this.audio,
+                  rnd: () => ((seed = (seed * 16807) % 2147483647) / 2147483647) };
     for (const e of world.entities) this.root.add(this._build(e, ctx, [0, 0, 0]));
     this._solidColliders();
     this.eyeName = eye || (world.player && world.player.eye) || 'adult';
     this.setView(view && this.views[view] ? view : Object.keys(this.views)[0]);
     this.setMode(mode || (world.controls && world.controls.default) || 'orbit');
+    if (!this.interaction) this.interaction = new Interaction(this);
     if (this.mats.missing.size) console.warn('materials not defined, default used:', [...this.mats.missing]);
     this.emit('load', world);
     return this;
@@ -171,20 +181,72 @@ export class Engine {
     const p = pose(this.walk.state); this.camera.position.copy(T3(...p.pos)); this.camera.lookAt(T3(...p.target));
   }
 
+  // World time runs at rules.physics.time_scale (XR-03): behaviours and robots read it. The visitor's own
+  // movement, captions, gaze and tours run on real time.
   step(dt, render = true) {          // render=false: advance the simulation only (tests, catch-up)
-    this.t += dt;
+    this.realTime += dt;
+    this.t += dt * (this.phys ? this.phys.timeScale : 1);
     for (const o of this.animated) {
+      if (o.userData.paused) continue;
       if (o.userData.tick) o.userData.tick(this.t, dt);
-      for (const b of o.userData.entity.behaviors || []) { const f = this.registry.behaviors.get(b.type); if (f) f(o, b, this.t, dt); }
+      for (const b of o.userData.entity.behaviors || []) { const f = this.registry.behaviors.get(b.type); if (f) f(o, b, this.t, dt, this); }
     }
+    if (this.tour) this._tourStep();
+    else if (this.interaction && (!this.headless || this.selftest)) this.interaction.step();
+    if (this.audio) this.audio.update(this.camera);
     if (this.mode === 'walk' && this.walk) { this.walk.update(dt); if (this.walk.state) this._applyWalk(); }
     else if (this.orbit && this.orbit.enabled) this.orbit.update();
     this.emit('step', dt);
     if (render) this.renderer.render(this.scene, this.camera);
   }
 
-  start() {
+  caption(text, obj, seconds) {
+    this.captionLog.push({ t: +this.realTime.toFixed(3), text, id: obj && obj.userData ? obj.userData.id : null });
+    this.captions.show(text, seconds);
+    this.emit('caption', text);
+  }
+
+  // Artist-defined camera tour (XR-02/XR-11). Every stop has a caption (world check).
+  startTour(id) {
+    const tr = (this.world.tours || []).find(t => t.id === id);
+    if (!tr) return false;
+    if (this.orbit) this.orbit.enabled = false;
+    if (this.walk && this.walk.enabled !== undefined) this.walk.enabled = false;
+    const d = new THREE.Vector3(); this.camera.getWorldDirection(d);
+    const p = FROM3(this.camera.position), dir = FROM3(d);
+    this.tour = { tr, t0: this.realTime, shown: -1, start: { pos: p, target: p.map((x, i) => x + dir[i] * 5), fov: this.camera.fov } };
+    this.emit('tour', id); return true;
+  }
+  _tourStep() {
+    const T = this.tour, s = tourAt(T.tr.stops, this.realTime - T.t0, T.start);
+    this.camera.position.copy(T3(...s.pos)); this.camera.lookAt(T3(...s.target));
+    if (s.fov) { this.camera.fov = fitFov(s.fov, this.size[0] / this.size[1]); this.camera.updateProjectionMatrix(); }
+    if (s.arrived && s.stop > T.shown) { T.shown = s.stop; this.caption(T.tr.stops[s.stop].caption, null, T.tr.stops[s.stop].dwell_s); }
+    if (s.done) { this.tour = null; this.emit('tourEnd', T.tr.id); if (this.orbit) { this.orbit.enabled = this.mode === 'orbit'; this.orbit.target.copy(T3(...s.target)); } }
+  }
+
+  // Low-spec mode (XR-07): one pixel per pixel, no shadows, no environment reflections, at most 4 point lights.
+  setLowSpec(on = true) {
+    this.lowspec = on;
+    this.renderer.setPixelRatio(on ? 1 : (this.headless ? 1 : Math.min(2, devicePixelRatio || 1)));
+    this.renderer.shadowMap.enabled = !on;
+    if (this.scene) {
+      if (on) { this._env = this.scene.environment; this.scene.environment = null; } else if (this._env) this.scene.environment = this._env;
+      let n = 0;
+      this.scene.traverse(o => { if (o.isPointLight || o.isSpotLight) o.visible = !on || n++ < 4; if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { m.needsUpdate = true; }); });
+    }
+    this.emit('lowspec', on);
+  }
+
+  start({ autoLowSpec = true } = {}) {
     const clock = new THREE.Clock();
-    this.renderer.setAnimationLoop(() => this.step(Math.min(0.1, clock.getDelta())));
+    let frames = 0, t0 = performance.now();
+    this.renderer.setAnimationLoop(() => {
+      this.step(Math.min(0.1, clock.getDelta()));
+      if (autoLowSpec && !this.lowspec && t0 !== null && ++frames === 60) {      // FPS probe over the first 60 frames
+        const fps = 60000 / (performance.now() - t0); t0 = null;
+        if (fps < 30) { this.setLowSpec(true); this.caption(`저사양 모드로 바꿨어요 (처음 측정 ${fps.toFixed(0)} fps)`); }
+      }
+    });
   }
 }

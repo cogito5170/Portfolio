@@ -1,0 +1,356 @@
+{
+ "format": "world/1",
+ "name": "말하는 정원 (경험 데모)",
+ "version": "1.0",
+ "about": "데모 — 작가 작품이 아니다. 경험 런타임 시연: 달 중력, 느린 시간, 위치에 따라 들리는 소리, 누르거나 다가가면 반응하는 것들, 말하는 산책자, 작가가 정한 투어. 모든 소리와 말은 자막으로도 나온다.",
+ "bounds": [
+  24,
+  24,
+  8
+ ],
+ "concepts": [
+  {
+   "id": "slow_moon",
+   "title": "느린 달의 정원",
+   "statement": "이 정원에서는 시간이 조금 느리고 몸이 가볍다. 떨어지는 것도 천천히 내려앉는다.",
+   "sources": [
+    {
+     "who": "World Platform 데모",
+     "kind": "own",
+     "note": "경험 런타임 시연용"
+    }
+   ],
+   "rules": [],
+   "drives": [
+    "walker"
+   ]
+  }
+ ],
+ "rules": {
+  "axes": {
+   "density": 0.4,
+   "colour": 0.5,
+   "form": 0.6,
+   "texture": 0.3,
+   "motion": 0.5,
+   "sound": 0.6,
+   "narrative": 0.7
+  },
+  "physics": {
+   "gravity_mps2": 1.62,
+   "time_scale": 0.6
+  }
+ },
+ "expressions": [
+  {
+   "medium": "web3d"
+  }
+ ],
+ "environment": {
+  "background": "#dfe7ef",
+  "exposure": 0.95,
+  "ambient": 0.8
+ },
+ "materials": {
+  "lawn": {
+   "color": "#ffffff",
+   "roughness": 1,
+   "texture": {
+    "kind": "speckle",
+    "colors": [
+     "#86a874",
+     "#749660",
+     "#97bb82"
+    ],
+    "size_m": 3
+   }
+  },
+  "stone": {
+   "color": "#c9bda8",
+   "roughness": 0.9
+  },
+  "chrome": {
+   "color": "#e6e9ee",
+   "roughness": 0.08,
+   "metalness": 1
+  },
+  "glow": {
+   "color": "#111111",
+   "emissive": "#ffd36e",
+   "emissive_intensity": 2.5
+  }
+ },
+ "entities": [
+  {
+   "id": "lawn",
+   "type": "plane",
+   "pos": [
+    12,
+    12,
+    0
+   ],
+   "size": [
+    24,
+    24
+   ],
+   "material": "lawn"
+  },
+  {
+   "id": "gate",
+   "type": "arch",
+   "pos": [
+    12,
+    6,
+    0
+   ],
+   "width": 2.2,
+   "height": 2.4,
+   "depth": 0.6,
+   "thickness": 0.5,
+   "material": "stone",
+   "triggers": [
+    {
+     "on": "near",
+     "radius": 2.0,
+     "do": [
+      {
+       "action": "caption",
+       "text": "문을 지나면 시간이 느려진다."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "moon",
+   "type": "sphere",
+   "pos": [
+    16,
+    14,
+    0.5
+   ],
+   "radius": 1.0,
+   "material": "chrome",
+   "behaviors": [
+    {
+     "type": "spin",
+     "axis": "z",
+     "deg_per_s": 15
+    }
+   ],
+   "triggers": [
+    {
+     "on": "tap",
+     "do": [
+      {
+       "action": "play",
+       "target": "moon_hum"
+      },
+      {
+       "action": "caption",
+       "text": "달이 낮게 울린다."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "moon_hum",
+   "type": "sound",
+   "pos": [
+    16,
+    14,
+    1.5
+   ],
+   "recipe": "chord",
+   "freqs": [
+    110,
+    165,
+    220
+   ],
+   "wave": "sine",
+   "caption": "낮은 화음 (달)",
+   "visible": false
+  },
+  {
+   "id": "fountain",
+   "type": "sound",
+   "pos": [
+    7,
+    15,
+    0.5
+   ],
+   "recipe": "noise",
+   "colour": "pink",
+   "freq": 900,
+   "caption": "물 흐르는 소리 (왼쪽 샘)"
+  },
+  {
+   "id": "drop1",
+   "type": "sphere",
+   "pos": [
+    9,
+    11,
+    0
+   ],
+   "radius": 0.25,
+   "material": "glow",
+   "behaviors": [
+    {
+     "type": "fall",
+     "height": 3,
+     "restitution": 0.6
+    }
+   ]
+  },
+  {
+   "id": "drop2",
+   "type": "sphere",
+   "pos": [
+    10,
+    12.5,
+    0
+   ],
+   "radius": 0.2,
+   "material": "glow",
+   "behaviors": [
+    {
+     "type": "fall",
+     "height": 4,
+     "restitution": 0.5
+    }
+   ]
+  },
+  {
+   "id": "walker",
+   "type": "character",
+   "name": "산책자",
+   "pos": [
+    13,
+    10,
+    0
+   ],
+   "color": "#9fb7ff",
+   "height": 1.6,
+   "lines": [
+    "어서 와요. 여기서는 몸이 가벼워요.",
+    "저 달을 눌러 보세요. 낮게 울어요.",
+    "천천히 걸어도 괜찮아요. 시간이 느리니까."
+   ],
+   "persona": "느긋하고 다정한 안내자. 정원 밖의 일은 잘 모른다.",
+   "live": true,
+   "triggers": [
+    {
+     "on": "tap",
+     "do": [
+      {
+       "action": "talk"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "lamp",
+   "type": "light",
+   "pos": [
+    12,
+    12,
+    5
+   ],
+   "kind": "point",
+   "color": "#fff1dc",
+   "intensity": 20,
+   "distance": 16
+  }
+ ],
+ "tours": [
+  {
+   "id": "walk",
+   "title": "정원 한 바퀴",
+   "stops": [
+    {
+     "pos": [
+      12,
+      2,
+      1.7
+     ],
+     "target": [
+      12,
+      6,
+      1.4
+     ],
+     "dwell_s": 3,
+     "caption": "문 — 여기서부터 시간이 느려진다."
+    },
+    {
+     "pos": [
+      13,
+      14,
+      2.2
+     ],
+     "target": [
+      16,
+      14,
+      0.8
+     ],
+     "dwell_s": 3,
+     "caption": "달 — 눌러 보면 낮게 울린다."
+    },
+    {
+     "pos": [
+      4,
+      18,
+      5
+     ],
+     "target": [
+      10,
+      12,
+      0.5
+     ],
+     "dwell_s": 3,
+     "caption": "떨어지는 빛 — 달 중력이라 천천히 내려앉는다."
+    }
+   ]
+  }
+ ],
+ "views": {
+  "aerial": {
+   "pos": [
+    2,
+    -4,
+    10
+   ],
+   "target": [
+    12,
+    12,
+    0.5
+   ],
+   "fov": 50
+  },
+  "eye": {
+   "pos": [
+    12,
+    2,
+    1.7
+   ],
+   "target": [
+    13,
+    10,
+    1.2
+   ],
+   "fov": 60
+  }
+ },
+ "player": {
+  "spawn": [
+   12,
+   2
+  ],
+  "yaw_deg": 90,
+  "eye": "adult"
+ },
+ "controls": {
+  "default": "orbit"
+ }
+}

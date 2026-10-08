@@ -55,4 +55,57 @@ export const selftests = {
     eng.step(tr.t.at(-1) / 2, false);
     return { pen_samples: n, ink_err_max_m: worst, ink_segments: st.inkSegments, pen_pairs: pairs, mid_time: st.time, mid_index: st.i };
   },
+  // V-18 experience scenario: enter -> move -> proximity trigger -> tap trigger (sound) -> talk to character -> tour.
+  // Driven through the real listeners (synthetic PointerEvents on the canvas, the same code path as a visitor).
+  async scenario(eng) {
+    const cv = eng.renderer.domElement, [w, h] = eng.size, steps = [];
+    cv.setPointerCapture = cv.releasePointerCapture = () => {};
+    const mouse = (type, x, y) => cv.dispatchEvent(new PointerEvent(type, { pointerId: 50, pointerType: 'mouse', isPrimary: true, clientX: x, clientY: y, button: 0, bubbles: true, cancelable: true }));
+    const screen = id => { const v = new THREE.Box3().setFromObject(eng.find(id)).getCenter(new THREE.Vector3()); v.project(eng.camera); return [(v.x + 1) / 2 * w, (1 - v.y) / 2 * h]; };   // aim at the middle of the body
+    const tapEntity = id => { const [x, y] = screen(id); mouse('pointerdown', x, y); mouse('pointerup', x, y); return eng.interaction.fired.some(f => f.id === id && f.on === 'tap'); };
+    steps.push({ step: 'enter', ok: !!eng.world && eng.root.children.length > 0, audio_before_gesture: eng.audio.ctx === null });
+    // move: walk forward with the on-screen joystick until the gate's proximity trigger fires
+    eng.setMode('walk');
+    ptr(cv, 'pointerdown', 1, 60, h - 140); ptr(cv, 'pointermove', 1, 60, h - 180);
+    let k = 0; for (; k < 600 && !eng.interaction.fired.some(f => f.id === 'gate'); k++) eng.step(1 / 60, false);
+    ptr(cv, 'pointerup', 1, 60, h - 180);
+    steps.push({ step: 'move+near', ok: eng.interaction.fired.some(f => f.id === 'gate' && f.on === 'near'), walked_s: +(k / 60).toFixed(2),
+                 caption: eng.captionLog.at(-1)?.text, audio_after_gesture: eng.audio.ctx !== null, sounds_started: eng.audio.started });
+    // tap the moon from the aerial view: plays its hum, shows its caption
+    eng.setMode('orbit'); eng.setView('aerial'); eng.step(1 / 60, false);
+    const before = eng.captionLog.length, tapped = tapEntity('moon');
+    steps.push({ step: 'tap', ok: tapped && eng.captionLog.slice(before).some(c => c.text.includes('달')), captions: eng.captionLog.slice(before).map(c => c.text) });
+    // talk to the character (scripted line; live replies need the exhibit server)
+    const b2 = eng.captionLog.length, talked = tapEntity('walker');
+    const said = eng.captionLog.slice(b2).map(c => c.text);
+    steps.push({ step: 'talk', ok: talked && said.some(t => t.startsWith('산책자: ')), captions: said });
+    // tour: every stop's caption appears, then it ends
+    const b3 = eng.captionLog.length; let ended = false; eng.on('tourEnd', () => { ended = true; });
+    eng.startTour('walk');
+    for (let i = 0; i < 60 * 20 && !ended; i++) eng.step(1 / 60, false);
+    const tc = eng.captionLog.slice(b3).map(c => c.text);
+    steps.push({ step: 'tour', ok: ended && eng.world.tours[0].stops.every(s => tc.includes(s.caption)), captions: tc });
+    return { steps, ok: steps.every(s => s.ok), captionLog: eng.captionLog };
+  },
+  // XR-04: no AudioContext before a gesture; one is made on the first gesture and sources start with captions.
+  async audio(eng) {
+    eng.renderer.domElement.setPointerCapture = eng.renderer.domElement.releasePointerCapture = () => {};
+    const before = eng.audio.ctx === null;
+    eng.renderer.domElement.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 9, pointerType: 'mouse', bubbles: true }));
+    const after = eng.audio.ctx !== null;
+    const captioned = eng.audio.sources.filter(s => s.node).every(s => eng.captionLog.some(c => c.text.includes(s.spec.caption)));
+    return { before_gesture_null: before, after_gesture_created: after, state: eng.audio.ctx && eng.audio.ctx.state, sources: eng.audio.sources.length,
+             started: eng.audio.started, captioned };
+  },
+  // XR-03: world time runs at rules.physics.time_scale; fall uses rules.physics.gravity_mps2.
+  async physics(eng) {
+    const spin = eng.find('moon'), drop = eng.find('drop1');
+    const a0 = spin.rotation.z;
+    eng.step(2.0, false);
+    return { time_scale: eng.phys.timeScale, g: eng.phys.g, world_t: eng.t, real_t: eng.realTime,
+             spin_rad: spin.rotation.z - a0, drop_z: drop.position.z - drop.userData.base.pos.z };
+  },
+  async lowspec(eng) {
+    return { lowspec: eng.lowspec, pixel_ratio: eng.renderer.getPixelRatio(), shadows: eng.renderer.shadowMap.enabled, env: eng.scene.environment !== null };
+  },
 };
