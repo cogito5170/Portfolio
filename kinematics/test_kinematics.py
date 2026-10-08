@@ -68,21 +68,70 @@ class TestKinematics(unittest.TestCase):
             
             violations = check_trajectory(robot, trajectory)
             
-            # Count expected violations
-            expected_violations = sum(1 for p in poses if p['is_violation'])
-            
-            # Map violations to step indices to count unique steps with violations
+            expected_violation_steps = set(i for i, p in enumerate(poses) if p['is_violation'])
             violated_steps = set(v[0] for v in violations)
-            
-            print(f"\n{robot_name}: Planted violations: {expected_violations}, Steps found with violations: {len(violated_steps)}")
-            
-            self.assertEqual(len(violated_steps), expected_violations, 
-                             f"Expected {expected_violations} steps with violations, found {len(violated_steps)}")
+            self.assertEqual(violated_steps, expected_violation_steps, 
+                             f"Expected violation steps {expected_violation_steps}, found {violated_steps}")
 
     def test_ik_unreachable(self):
         # Target way outside workspace (max reach is 3.0)
         ik_angles = inverse_kinematics_planar_3dof(self.planar_robot, 10.0, 10.0)
-        self.assertIsNone(ik_angles, "IK should return None for unreachable targets")
+        self.assertEqual(ik_angles, 'unreachable', "IK should return 'unreachable' for unreachable targets")
+
+
+    def test_ik_edge_cases(self):
+        # Origin
+        angles = inverse_kinematics_planar_3dof(self.planar_robot, 0.0, 0.0)
+        self.assertIsNotNone(angles)
+        self.assertNotEqual(angles, 'unreachable')
+        ee = forward_kinematics(self.planar_robot, angles)
+        self.assertAlmostEqual(ee[0], 0.0, places=4)
+        self.assertAlmostEqual(ee[1], 0.0, places=4)
+        
+        # Full reach (3.0)
+        angles = inverse_kinematics_planar_3dof(self.planar_robot, 3.0, 0.0)
+        self.assertIsNotNone(angles)
+        self.assertNotEqual(angles, 'unreachable')
+        ee = forward_kinematics(self.planar_robot, angles)
+        self.assertAlmostEqual(ee[0], 3.0, places=4)
+        self.assertAlmostEqual(ee[1], 0.0, places=4)
+        
+        # Just beyond reach
+        angles = inverse_kinematics_planar_3dof(self.planar_robot, 3.0001, 0.0)
+        self.assertEqual(angles, 'unreachable')
+        
+    def test_ik_diff_links(self):
+        robot = parse_urdf(os.path.join(os.path.dirname(__file__), 'planar_3_dof_diff_links.urdf'))
+        # Origin
+        angles = inverse_kinematics_planar_3dof(robot, 0.0, 0.0)
+        self.assertIsNotNone(angles)
+        self.assertNotEqual(angles, 'unreachable')
+        ee = forward_kinematics(robot, angles)
+        self.assertAlmostEqual(ee[0], 0.0, places=4)
+        self.assertAlmostEqual(ee[1], 0.0, places=4)
+        
+        # Full reach
+        angles = inverse_kinematics_planar_3dof(robot, 3.0, 0.0)
+        self.assertIsNotNone(angles)
+        self.assertNotEqual(angles, 'unreachable')
+        ee = forward_kinematics(robot, angles)
+        self.assertAlmostEqual(ee[0], 3.0, places=4)
+        self.assertAlmostEqual(ee[1], 0.0, places=4)
+        
+        # Just beyond reach
+        angles = inverse_kinematics_planar_3dof(robot, 3.0001, 0.0)
+        self.assertEqual(angles, 'unreachable')
+
+    def test_trajectory_violations_with_fixed_joint(self):
+        robot = parse_urdf(os.path.join(os.path.dirname(__file__), 'planar_arm_with_fixed.urdf'))
+        trajectory = [
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.5],
+            [0.0, 4.0, 0.0],
+        ]
+        violations = check_trajectory(robot, trajectory)
+        violated_steps = set(v[0] for v in violations)
+        self.assertEqual(violated_steps, {1, 2})
 
 if __name__ == '__main__':
     unittest.main()

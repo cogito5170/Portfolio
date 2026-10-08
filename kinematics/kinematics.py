@@ -92,49 +92,107 @@ def forward_kinematics_full(robot, angles):
 def forward_kinematics(robot, angles):
     return forward_kinematics_full(robot, angles)[-1]
 
+def normalize(q):
+    return (q + math.pi) % (2 * math.pi) - math.pi
+
 def inverse_kinematics_planar_3dof(robot, target_x, target_y):
-    # Analytical IK for 3-DOF planar arm with L1=1, L2=1, L3=1
-    D = math.sqrt(target_x**2 + target_y**2)
-    if D > 3.0 or D < 0.0:
+    active_joints = [j for j in robot.joints if j.type in ['revolute', 'continuous']]
+    if len(active_joints) != 3:
         return None
         
-    # Choose L23 (effective length of link2 + link3)
-    # Must satisfy |1 - L23| <= D <= 1 + L23
-    min_L23 = abs(D - 1.0)
-    max_L23 = min(2.0, D + 1.0)
-    L23 = (min_L23 + max_L23) / 2.0
+    limits = [(j.limit_lower, j.limit_upper) for j in active_joints]
     
-    # Clamp due to floating point
-    cos_q3 = (L23**2 - 2.0) / 2.0
-    cos_q3 = max(-1.0, min(1.0, cos_q3))
-    q3 = math.acos(cos_q3)
+    zeros = [0.0] * len(active_joints)
+    positions = forward_kinematics_full(robot, zeros)
     
-    # Calculate q1 and virtual q2 (angle of L23 relative to L1)
-    cos_alpha = (1.0 + D**2 - L23**2) / (2.0 * D)
-    cos_alpha = max(-1.0, min(1.0, cos_alpha))
-    alpha = math.acos(cos_alpha)
+    active_indices = [i for i, j in enumerate(robot.joints) if j.type in ['revolute', 'continuous']]
     
-    cos_beta = (1.0 + L23**2 - D**2) / (2.0 * L23)
-    cos_beta = max(-1.0, min(1.0, cos_beta))
-    beta = math.acos(cos_beta)
+    p0 = positions[active_indices[0] + 1]
+    p1 = positions[active_indices[1] + 1]
+    p2 = positions[active_indices[2] + 1]
+    p3 = positions[-1]
     
-    q1 = math.atan2(target_y, target_x) - alpha
-    q23 = math.pi - beta
+    L1 = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+    L2 = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+    L3 = math.hypot(p3[0] - p2[0], p3[1] - p2[1])
     
-    # Calculate angle of L23 relative to Link 2
-    # By sine rule or just geometry:
-    # L23_y = 1.0 * sin(q3)
-    # L23_x = 1.0 + 1.0 * cos(q3)
-    gamma = math.atan2(math.sin(q3), 1.0 + math.cos(q3))
+    tx = target_x - p0[0]
+    ty = target_y - p0[1]
+    D = math.sqrt(tx**2 + ty**2)
     
-    q2 = q23 - gamma
+    min_L23 = abs(D - L1)
+    max_L23 = min(L2 + L3, D + L1)
     
-    return [q1, q2, q3]
+    if min_L23 > max_L23 + 1e-6:
+        return 'unreachable'
+        
+    def check_solution(q1, q2, q3):
+        q1 = normalize(q1)
+        q2 = normalize(q2)
+        q3 = normalize(q3)
+        if limits[0][0] - 1e-4 <= q1 <= limits[0][1] + 1e-4 and \
+           limits[1][0] - 1e-4 <= q2 <= limits[1][1] + 1e-4 and \
+           limits[2][0] - 1e-4 <= q3 <= limits[2][1] + 1e-4:
+            return [q1, q2, q3]
+        return None
+
+    if D <= 1e-6:
+        L23 = L1
+        for i in range(100):
+            q1 = -math.pi + 2 * math.pi * i / 99.0
+            for sign_q3 in [1, -1]:
+                cos_q3 = (L23**2 - L2**2 - L3**2) / (2.0 * L2 * L3)
+                if cos_q3 < -1.0 - 1e-6 or cos_q3 > 1.0 + 1e-6:
+                    continue
+                q3 = math.acos(max(-1.0, min(1.0, cos_q3))) * sign_q3
+                
+                L1_x = L1 * math.cos(q1)
+                L1_y = L1 * math.sin(q1)
+                L23_x = tx - L1_x
+                L23_y = ty - L1_y
+                L23_angle_world = math.atan2(L23_y, L23_x)
+                q23 = L23_angle_world - q1
+                gamma = math.atan2(L3 * math.sin(q3), L2 + L3 * math.cos(q3))
+                q2 = q23 - gamma
+                
+                sol = check_solution(q1, q2, q3)
+                if sol: return sol
+    else:
+        for i in range(100):
+            L23 = min_L23 + (max_L23 - min_L23) * i / 99.0
+            for sign_alpha in [1, -1]:
+                for sign_q3 in [1, -1]:
+                    cos_q3 = (L23**2 - L2**2 - L3**2) / (2.0 * L2 * L3)
+                    if cos_q3 < -1.0 - 1e-6 or cos_q3 > 1.0 + 1e-6:
+                        continue
+                    q3 = math.acos(max(-1.0, min(1.0, cos_q3))) * sign_q3
+                    
+                    cos_alpha = (L1**2 + D**2 - L23**2) / (2.0 * L1 * D)
+                    if cos_alpha < -1.0 - 1e-6 or cos_alpha > 1.0 + 1e-6:
+                        continue
+                    alpha = math.acos(max(-1.0, min(1.0, cos_alpha))) * sign_alpha
+                    
+                    q1 = math.atan2(ty, tx) - alpha
+                    
+                    L1_x = L1 * math.cos(q1)
+                    L1_y = L1 * math.sin(q1)
+                    L23_x = tx - L1_x
+                    L23_y = ty - L1_y
+                    L23_angle_world = math.atan2(L23_y, L23_x)
+                    q23 = L23_angle_world - q1
+                    gamma = math.atan2(L3 * math.sin(q3), L2 + L3 * math.cos(q3))
+                    q2 = q23 - gamma
+                    
+                    sol = check_solution(q1, q2, q3)
+                    if sol: return sol
+                    
+    return 'unreachable'
 
 def check_trajectory(robot, trajectory):
     violations = []
+    active_joints = [j for j in robot.joints if j.type in ['revolute', 'continuous']]
     for step_idx, angles in enumerate(trajectory):
-        for joint_idx, (joint, angle) in enumerate(zip(robot.joints, angles)):
+        for joint_idx, (joint, angle) in enumerate(zip(active_joints, angles)):
             if angle < joint.limit_lower or angle > joint.limit_upper:
                 violations.append((step_idx, joint.name, angle, joint.limit_lower, joint.limit_upper))
     return violations
