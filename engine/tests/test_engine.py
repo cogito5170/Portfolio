@@ -15,10 +15,9 @@ from pathlib import Path
 
 ENGINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ENGINE))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from worldengine import png as pngcheck
 from worldengine import headless, html, layout, pipeline, scene as S  # noqa: E402
-import pngcheck  # noqa: E402
 
 
 class SceneTests(unittest.TestCase):
@@ -73,6 +72,18 @@ class PipelineHonestyTests(unittest.TestCase):
             else:
                 self.assertEqual(v["backend"], pipeline.FALLBACK)
             self.assertTrue(Path(r["html"]).exists())
+
+
+class PngTests(unittest.TestCase):
+    def test_write_read_crop_roundtrip(self):
+        w, h = 7, 5
+        px = bytes((x * 30 + y * 7 + c * 50) % 256 for y in range(h) for x in range(w) for c in range(3))
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "a.png"
+            pngcheck.write(p, w, h, 3, px)
+            self.assertEqual(pngcheck.read(p), (w, h, 3, px))
+            pngcheck.crop(p, 4, 3)
+            self.assertEqual(pngcheck.read(p), (4, 3, 3, b"".join(px[y * w * 3:y * w * 3 + 12] for y in range(3))))
 
 
 @unittest.skipUnless(headless.available()[0], "no headless browser: %s" % headless.available()[1])

@@ -12,10 +12,9 @@ from pathlib import Path
 
 ENGINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ENGINE))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from worldengine import png as pngcheck
 from worldengine import draw as D, headless, robot as RB, world as WD  # noqa: E402
-import pngcheck  # noqa: E402
 
 KIN = ENGINE.parent / "kinematics"
 PLANE = {"origin": [0, 0, 0], "u": [1, 0, 0], "v": [0, 1, 0]}

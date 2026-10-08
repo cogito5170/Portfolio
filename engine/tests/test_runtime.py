@@ -14,10 +14,9 @@ from pathlib import Path
 
 ENGINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ENGINE))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from worldengine import png as pngcheck
 from worldengine import headless, layout, world as WD  # noqa: E402
-import pngcheck  # noqa: E402
 
 FIX = ENGINE / "runtime" / "tests" / "fixtures_check.json"
 GARDEN = ENGINE / "worlds" / "contradiction_garden.world.json"
@@ -55,6 +54,7 @@ def _assert_picture(tc, png, w, h):
     tc.assertEqual((st["w"], st["h"]), (w, h))
     tc.assertGreater(st["distinct"], 200, st)
     tc.assertGreater(st["lum_sd"], 10.0, st)
+    tc.assertGreater(st["bottom_distinct"], 1, st)        # no flat band where the viewport fell short of the window
     return st
 
 

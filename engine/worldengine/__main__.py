@@ -7,6 +7,7 @@
     world <file.world.json|example:NAME> [--views aerial,eye] [--mode orbit|walk] [--eye adult|child]
                                          render a world through the modular runtime (engine/runtime)
     serve [--port 8000] [--host 0.0.0.0] serve engine/ so a phone or PC on the same network can open the runtime
+    site [--out DIR] [--no-smoke]        static site (runtime + three.js + worlds + landing page); smoke-loads every world
     draw [--urdf U] [--svg F --scale S --center X,Y] [--views aerial,top] [--save-world]
                                          drawing robot: plan, verify (V-16), write a world, render it mid-drawing and done
 
@@ -75,7 +76,21 @@ def main(argv=None) -> int:
     a.add_argument("--center", default="1.9,0"); a.add_argument("--views", default="aerial,top")
     a.add_argument("--out", default=str(OUT)); a.add_argument("--w", type=int, default=1280); a.add_argument("--h", type=int, default=800)
     a.add_argument("--save-world", action="store_true", help="also write worlds/drawing_robot.world.json")
+    a.add_argument("--concept", default="klee", help="klee (demo concept card) | none | path to a JSON list of concept cards")
+    a = sub.add_parser("site"); a.add_argument("--out", default=str(ENGINE / "build" / "site")); a.add_argument("--no-smoke", action="store_true")
     a = ap.parse_args(argv)
+    if a.cmd == "site":
+        from worldengine import site
+        r = site.build(a.out)
+        print("산출물:", r["out"])
+        bad = []
+        if not a.no_smoke:
+            for s_ in site.smoke(a.out):
+                print("%s %s%s" % ("열림" if s_["ok"] else "**안 열림**", s_["file"], "" if s_["ok"] else " — " + s_["reason"]))
+                bad += [] if s_["ok"] else [s_["file"]]
+        print("=== 보고 ===")
+        print("작품 %d개 · 스모크 %s" % (len(r["worlds"]), "생략" if a.no_smoke else ("모두 열림" if not bad else "실패 %d" % len(bad))))
+        return 1 if bad else 0
     if a.cmd == "draw":
         return _draw(a)
     if a.cmd == "world":
@@ -136,15 +151,21 @@ def _draw(a) -> int:
         strokes = [[[c[0] + (x - mx) * a.scale, c[1] - (y - my) * a.scale] for x, y in s] for s in raw]   # SVG y is down
     else:
         strokes = D.demo_strokes(tuple(c))
+    from worldengine import concept as CP
+    concepts = {"klee": [CP.KLEE_WALK], "none": []}.get(a.concept)
+    if concepts is None:
+        concepts = json.loads(Path(a.concept).read_text(encoding="utf-8"))
+    effects, opts, strokes = CP.apply(concepts, "arm", strokes)
     q0, err = D.home(ch, [c[0], c[1], 0.0], [-0.6, 0.7, 0.6][:len(RB.active(ch))] + [0.0] * max(0, len(RB.active(ch)) - 3))
-    p = D.plan(ch, strokes, {"origin": [0, 0, 0], "u": [1, 0, 0], "v": [0, 1, 0]}, q_home=q0)
+    p = D.plan(ch, strokes, {"origin": [0, 0, 0], "u": [1, 0, 0], "v": [0, 1, 0]}, q_home=q0, opts=opts)
+    concept_ok = CP.measure(effects, p["verify"])
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     stem = "draw_" + (Path(a.svg).stem if a.svg else "demo")
-    w = D.world(p)
+    w = D.world(p, concepts=concepts, effects=effects)
     bad = WD.check(w)
     if bad:
         print("세계 파일 오류:", bad); return 2
-    md = out / (stem + "_V16.md"); md.write_text(D.report_md(p, stem), encoding="utf-8")
+    md = out / (stem + "_V16.md"); md.write_text(D.report_md(p, stem, effects), encoding="utf-8")
     print("산출물:", WD.save(w, out / (stem + ".world.json"))); print("산출물:", md)
     if a.save_world:
         print("산출물:", WD.save(w, ENGINE / "worlds" / "drawing_robot.world.json"))
@@ -156,7 +177,9 @@ def _draw(a) -> int:
             print(("산출물: %s" % png) if r["ok"] else "**그림 없음** %s: %s" % (v, r["reason"]))
     print("=== 보고 ===")
     print(md.read_text(encoding="utf-8"))
-    return 0 if p["verify"]["pass"] else 1
+    if not concept_ok:
+        print("**개념 규칙을 지키지 못했다**: " + ", ".join(e["param"] for e in effects if e["met"] is False))
+    return 0 if p["verify"]["pass"] and concept_ok else 1
 
 
 def _serve(a) -> int:

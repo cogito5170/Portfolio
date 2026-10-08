@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Minimal stdlib PNG reader (8-bit RGB/RGBA, non-interlaced) -- enough to check a render is not blank."""
+"""Minimal stdlib PNG reader/writer (8-bit RGB/RGBA, non-interlaced): check a render is not blank, crop a screenshot."""
 from __future__ import annotations
 
 import struct
@@ -60,3 +60,21 @@ def stats(path, step: int = 7) -> dict:
     sd = (sum((v - mean) ** 2 for v in lum) / len(lum)) ** 0.5
     band = {tuple(px[(y * w + x) * ch:(y * w + x) * ch + 3]) for y in range(h - max(1, h // 20), h) for x in range(0, w, step)}
     return {"w": w, "h": h, "distinct": len(cols), "lum_sd": sd, "bottom_distinct": len(band)}
+
+
+def write(path, w: int, h: int, ch: int, px: bytes) -> None:
+    rows = b"".join(b"\x00" + px[y * w * ch:(y + 1) * w * ch] for y in range(h))
+    chunk = lambda k, d: struct.pack(">I", len(d)) + k + d + struct.pack(">I", zlib.crc32(k + d) & 0xFFFFFFFF)
+    ihdr = struct.pack(">IIBBBBB", w, h, 8, 2 if ch == 3 else 6, 0, 0, 0)
+    with open(path, "wb") as fh:
+        fh.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(rows, 6)) + chunk(b"IEND", b""))
+
+
+def crop(path, w: int, h: int) -> None:
+    """Keep the top-left w x h of the image at path (in place)."""
+    W, H, ch, px = read(path)
+    if (W, H) == (w, h):
+        return
+    if W < w or H < h:
+        raise ValueError("image %dx%d is smaller than %dx%d" % (W, H, w, h))
+    write(path, w, h, ch, b"".join(px[y * W * ch:y * W * ch + w * ch] for y in range(h)))

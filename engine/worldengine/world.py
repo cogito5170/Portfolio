@@ -81,10 +81,55 @@ def check(w, known_types=None) -> "list[str]":
             bad.append("player.spawn must be [x,y]")
         if "eye" in pl and pl["eye"] not in {**EYE_HEIGHTS, **(pl.get("eye_heights") or {})}:
             bad.append('player.eye unknown: "%s"' % pl["eye"])
+    _check_concepts(w, ids, bad)
     mode = (w.get("controls") or {}).get("default")
     if mode is not None and mode not in ("orbit", "walk"):
         bad.append('controls.default must be orbit|walk: "%s"' % mode)
     return bad
+
+
+SOURCE_KINDS = ("quote", "paraphrase", "own", "interview")
+
+
+def _check_concepts(w, ids, bad):
+    """Concept cards (the Concept ingredient). Every claim names its source and how it was used; rules say what
+    they change; drives must point at entities that exist."""
+    cs = w.get("concepts")
+    if cs is None:
+        return
+    if not isinstance(cs, list):
+        bad.append("concepts must be a list"); return
+    seen = set()
+    for i, c in enumerate(cs):
+        p = "concepts[%d]" % i
+        if not isinstance(c, dict):
+            bad.append("%s must be an object" % p); continue
+        if not isinstance(c.get("id"), str) or not c.get("id"):
+            bad.append("%s.id must be a non-empty string" % p)
+        elif c["id"] in seen:
+            bad.append('%s.id duplicated: "%s"' % (p, c["id"]))
+        else:
+            seen.add(c["id"])
+        for k in ("title", "statement"):
+            if not isinstance(c.get(k), str) or not c.get(k):
+                bad.append("%s.%s must be a non-empty string" % (p, k))
+        src = c.get("sources")
+        if not isinstance(src, list) or not src:
+            bad.append("%s.sources must be a non-empty list (say where the idea comes from, even if it is your own)" % p)
+        else:
+            for j, so in enumerate(src):
+                if not isinstance(so, dict) or not so.get("who"):
+                    bad.append("%s.sources[%d].who is required" % (p, j))
+                elif so.get("kind") not in SOURCE_KINDS:
+                    bad.append('%s.sources[%d].kind must be one of %s: %s' % (p, j, "|".join(SOURCE_KINDS), _js(so.get("kind"))))
+                elif so.get("kind") == "quote" and not so.get("where"):
+                    bad.append("%s.sources[%d] is a quote: where (book/page/url) is required" % (p, j))
+        for j, r in enumerate(c.get("rules") or []):
+            if not isinstance(r, dict) or not isinstance(r.get("param"), str) or "value" not in r:
+                bad.append("%s.rules[%d] needs param and value" % (p, j))
+        for d in c.get("drives") or []:
+            if d not in ids:
+                bad.append('%s.drives "%s" is not an entity id' % (p, d))
 
 
 def from_scene(sc: dict) -> dict:

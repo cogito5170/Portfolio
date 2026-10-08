@@ -7,6 +7,9 @@ const CSS = `
   max-width:calc(100vw - 20px);font:14px "Noto Sans KR","WenQuanYi Zen Hei",system-ui,sans-serif}
 .we-bar button,.we-bar select{min-height:44px;min-width:44px;padding:0 12px;border:0;border-radius:10px;background:#ffffffe6;color:#222;font:inherit;box-shadow:0 1px 4px #0003}
 .we-bar button[aria-pressed=true]{background:#222;color:#fff}
+.we-card{position:fixed;left:10px;top:calc(max(8px,env(safe-area-inset-top)) + 84px);width:min(360px,calc(100vw - 20px));max-height:60vh;overflow:auto;
+  box-sizing:border-box;background:#fffffff2;color:#222;border-radius:12px;padding:12px 14px;font:13px/1.5 "Noto Sans KR","WenQuanYi Zen Hei",system-ui,sans-serif;box-shadow:0 2px 12px #0003}
+.we-card h3{margin:0 0 4px;font-size:15px}.we-card .src{color:#555;font-size:12px;margin:6px 0}.we-card li{margin:2px 0}.we-card .no{color:#b00}
 .we-joy{position:fixed;display:none;width:0;height:0;pointer-events:none;z-index:5}
 .we-joy-base{position:absolute;left:-56px;top:-56px;width:112px;height:112px;border-radius:50%;background:#ffffff40;border:2px solid #ffffffb0}
 .we-joy-knob{position:absolute;left:-24px;top:-24px;width:48px;height:48px;border-radius:50%;background:#ffffffe0;box-shadow:0 1px 6px #0005}
@@ -21,6 +24,26 @@ export function hud(eng) {
   const sel = document.createElement('select');
   for (const k of Object.keys(eng.views)) sel.add(new Option(k, k));
   sel.onchange = () => eng.setView(sel.value); bar.appendChild(sel);
+  const concepts = eng.world.concepts || [];
+  let card = null;
+  if (concepts.length) {
+    card = document.createElement('div'); card.className = 'we-card'; card.hidden = true; document.body.appendChild(card);
+    const eff = (eng.world.verify && eng.world.verify.concept_effects) || [];
+    for (const c of concepts) {
+      const sec = document.createElement('section');
+      const h = document.createElement('h3'); h.textContent = '개념 · ' + c.title; sec.appendChild(h);
+      const st = document.createElement('div'); st.textContent = c.statement; sec.appendChild(st);
+      for (const so of c.sources) { const d = document.createElement('div'); d.className = 'src';
+        d.textContent = `${{ quote: '인용', paraphrase: '의역', own: '자체', interview: '인터뷰' }[so.kind] || so.kind} — ${so.who}${so.where ? ', ' + so.where : ''}${so.note ? ' (' + so.note + ')' : ''}`; sec.appendChild(d); }
+      const ul = document.createElement('ul');
+      for (const r of c.rules || []) { const e = eff.find(x => x.concept === c.id && x.param === r.param); const li = document.createElement('li');
+        li.textContent = `${r.why || r.param}: ${r.param} = ${JSON.stringify(r.value)} → ${e ? (e.applied ? (e.met === false ? '적용했지만 측정상 못 지킴 · ' : e.measured != null ? `지킴 (측정 ${typeof e.measured === 'number' ? +e.measured.toFixed(4) : e.measured}) · ` : '적용됨 · ') : '적용 안 됨 · ') + e.note : '이 작품에서 측정 안 됨'}`;
+        if (e && (!e.applied || e.met === false)) li.className = 'no'; ul.appendChild(li); }
+      sec.appendChild(ul); card.appendChild(sec);
+    }
+    btn('개념', () => { card.hidden = !card.hidden; });
+    if (new URLSearchParams(location.search).has('card')) card.hidden = false;   // link that opens on the concept card
+  }
   const bOrbit = btn('둘러보기', () => eng.setMode('orbit')), bWalk = btn('걷기', () => eng.setMode('walk'));
   const bAdult = btn('어른 눈높이', () => eng.setEye('adult')), bChild = btn('아이 눈높이', () => eng.setEye('child'));
   const help = () => eng.mode === 'walk'

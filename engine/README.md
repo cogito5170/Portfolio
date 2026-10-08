@@ -32,8 +32,18 @@ python3 -m worldengine draw --svg my.svg --scale 0.002   # M/L/H/V/Z 경로만. 
 | 검증 | `draw.verify` | 기준 FK 로 획 오차 · 표본 사이 관절 보간 중점 오차 · 도달 실패 · 기준 `check_trajectory` 한계 위반 · 이웃 아닌 링크 간격(자기 충돌) · 관절 속도 |
 | 재생 | `robot.arm` | JS FK 가 기준 test_vectors 600개와 1e-9 m 이내로 일치 (node 테스트) · 브라우저 안에서 잉크 ↔ 의도한 획 비교 (self-test) |
 
-데모 측정 (`worlds/drawing_robot.world.json`, planar_3_dof, 표본 862, 재생 54.7 s): 획 오차 최대 0.010 mm · 보간 중점 0.039 mm · 도달 실패 0 · 한계 위반 0 · 자기 충돌 0 (최소 링크 간격 0.99 m) · 관절 속도 최대 0.58 rad/s (한계 1.5, 기본값 — URDF velocity 는 기준 파서가 읽지 않는다). 브라우저 잉크 ↔ 의도한 획 최대 0.010 mm.
+데모 측정 (개념 카드 없이, planar_3_dof, 표본 862, 재생 54.7 s): 획 오차 최대 0.010 mm · 보간 중점 0.039 mm · 도달 실패 0 · 한계 위반 0 · 자기 충돌 0 (최소 링크 간격 0.99 m) · 관절 속도 최대 0.58 rad/s (한계 1.5, 기본값 — URDF velocity 는 기준 파서가 읽지 않는다). 브라우저 잉크 ↔ 의도한 획 최대 0.010 mm. 저장소의 `worlds/drawing_robot.world.json` 은 개념 카드를 적용한 판이다 (아래).
 일부러 한계를 넘는 그림(joint1 을 [−1.2, −0.9] rad 로 좁힘): 한계를 지키며 계획하면 도달 실패로, 한계를 무시하고 계획하면 기준 검사기가 위반 134건으로 잡는다 — 둘 다 FAIL. 6축 팔(arm_6_dof)도 같은 계획기로 사각형을 그려 통과.
+
+### 개념 카드 (다섯 재료 중 개념)
+
+세계의 `concepts` 에 카드를 단다: `id · title · statement · sources[{who, kind: quote|paraphrase|own|interview, where, note}] · rules[{param, value, why}] · drives[엔티티 id]`.
+출처 없는 개념, 출처(where) 없는 인용, 없는 엔티티를 가리키는 drives 는 JS·Python 검사가 같은 문장으로 거부한다.
+규칙은 `worldengine/concept.py` 가 계획기 설정으로 바꾸고(지원: `pen.lifts`=0, `draw.v_draw`, `draw.max_strokes`), **끝난 궤적에서 다시 측정해** 지켰는지 적는다. 모르는 규칙은 "적용 안 됨 + 이유"로 남는다.
+
+데모 카드 "산책하는 선" — Paul Klee 의 널리 퍼진 의역(원문 인용 아님, 그렇게 표시)을 데모가 규칙 둘로 번역: 펜을 떼지 않는다, 0.15 m/s 로 천천히.
+측정: 개념 없음 → 그리는 도중 펜 떼기 2회 · 54.7 s / 개념 적용 → 0회 · 97.0 s · 최대 펜 속도 0.15 m/s, 두 경우 모두 V-16 통과 (획 오차 0.0099 mm).
+링크에 `&card=1` 을 붙이면 카드를 연 채로 시작한다.
 
 좌표: 미터, z 위, x 동, y 북. three.js 의 y-위로 바꾸는 곳은 `engine.js` 의 root 그룹 한 곳뿐.
 
@@ -70,11 +80,21 @@ python3 -m unittest discover -s tests -v   # node 가 있으면 runtime/tests/*.
 
 보고의 `백엔드:` 줄이 각 그림을 실제로 무엇이 그렸는지 말한다: `three.js r170 · headless chromium (CLI|playwright)` / `matplotlib 대체(비실사)` / `없음`.
 
+## 링크로 공유 (XR-06)
+
+```bash
+python3 -m worldengine site            # → engine/build/site : runtime + three.js + worlds + 목록 페이지(index.html), 1.7 MB
+```
+모든 경로가 상대 경로라 어떤 정적 호스트에도 올라간다 (서버 코드 없음). 만든 폴더에서 작품마다 실제 방문 URL 로 헤드리스 로드를 해 본다 (`tests/test_site.py` 도 같은 검사).
+file:// 로 직접 열면 브라우저가 모듈·fetch 를 막으니 정적 서버(`python3 -m http.server`)나 호스팅이 필요하다.
+
+GitHub Pages: `.github/workflows/pages.yml` 이 main 에서만 배포한다. **꺼져 있다** — 저장소 주인이 Settings → Pages → Source 를 "GitHub Actions" 로 두고, Actions 변수 `PAGES_ENABLED=true` 를 만들어야 돈다. 공개 여부는 사용자가 정한다.
+
 ## 헤드리스 렌더 (브라우저 찾는 순서)
 
 1. `WE_CHROMIUM` 환경변수
 2. `/opt/pw-browsers/chromium_headless_shell-*/chrome-linux/headless_shell` — 뷰포트가 `--window-size` 와 정확히 같다
-3. `/opt/pw-browsers/chromium-*/chrome-linux/chrome` — `--headless=new` 에서 아래쪽에 빈 띠가 생긴 적이 있다 (테스트가 잡는다)
+3. `/opt/pw-browsers/chromium-*/chrome-linux/chrome` — `--headless=new` 에서 뷰포트가 창보다 짧아 아래쪽에 빈 띠가 생긴다. 페이지가 실제 뷰포트를 알려 주면(`WE_VIEWPORT`) 모자란 만큼 창을 키워 다시 찍고 요청 크기로 자른다. 이 브라우저는 창 폭이 최소 500 px 이라 더 좁은 요청(휴대폰 390 px)은 결과의 `viewport` 에 실제 폭(500)이 남는다
 4. PATH 의 `chromium` / `chromium-browser` / `google-chrome`
 
 페이지는 `window.__done` / `window.__err` 로 상태를 알리고, 서빙할 때 넣는 작은 스크립트가 이를 `console.log("WE_STATUS:...")` 로 바꿔 stderr 에서 읽는다. 오류 페이지는 스크린샷을 성공으로 내지 않는다.
