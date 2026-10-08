@@ -1,3 +1,9 @@
 __pycache__/
 *.pyc
 engine/build/
+# studio private data (default lives in ~/.worldengine, these cover a data dir pointed inside the repo)
+.worldengine/
+**/studio_data/
+**/vocab/*.json
+.env
+*.key
