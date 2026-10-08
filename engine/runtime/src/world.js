@@ -55,6 +55,7 @@ export function check(w, knownTypes = null) {
   }
   checkConcepts(w, ids, bad);
   checkRules(w, bad);
+  checkExperience(w, bad);
   const mode = w.controls && w.controls.default;
   if (mode !== undefined && !['orbit', 'walk'].includes(mode)) bad.push(`controls.default must be orbit|walk: "${mode}"`);
   return bad;
@@ -116,6 +117,57 @@ function checkRules(w, bad) {
   if ('version' in w && !(typeof w.version === 'string' && w.version)) bad.push('version must be a non-empty string');
   const fk = w.forked_from;
   if (fk !== undefined && fk !== null && !(typeof fk === 'object' && typeof fk.world === 'string' && fk.world)) bad.push('forked_from.world must name the parent world');
+}
+
+export const TRIGGER_ON = ['tap', 'near'];
+export const ACTIONS = ['play', 'toggle', 'caption', 'tour', 'talk'];
+
+// Experience runtime: same rules and messages as world.py _check_experience.
+function checkExperience(w, bad) {
+  const ph = w.rules && typeof w.rules === 'object' && !Array.isArray(w.rules) ? w.rules.physics : undefined;
+  if (ph !== undefined && ph !== null) {
+    if (typeof ph !== 'object' || Array.isArray(ph)) bad.push('rules.physics must be an object');
+    else {
+      const g = ph.gravity_mps2, ts = ph.time_scale;
+      if (g !== undefined && g !== null && !(isNum(g) && g >= 0 && g <= 100)) bad.push(`rules.physics.gravity_mps2 must be in [0,100]: ${JSON.stringify(g)}`);
+      if (ts !== undefined && ts !== null && !(isNum(ts) && ts > 0 && ts <= 10)) bad.push(`rules.physics.time_scale must be in (0,10]: ${JSON.stringify(ts)}`);
+    }
+  }
+  const tours = w.tours, tourIds = new Set();
+  if (tours !== undefined && tours !== null) {
+    if (!Array.isArray(tours)) bad.push('tours must be a list');
+    else tours.forEach((t, i) => {
+      const p = `tours[${i}]`;
+      if (!t || typeof t !== 'object' || typeof t.id !== 'string' || !t.id) { bad.push(`${p}.id must be a non-empty string`); return; }
+      tourIds.add(t.id);
+      if (!Array.isArray(t.stops) || !t.stops.length) { bad.push(`${p}.stops must be a non-empty list`); return; }
+      t.stops.forEach((st, j) => {
+        const q = `${p}.stops[${j}]`;
+        if (!st || typeof st !== 'object' || !(isVec(st.pos, 3) && isVec(st.target, 3))) bad.push(`${q} needs pos and target`);
+        else if (!(isNum(st.dwell_s) && st.dwell_s > 0)) bad.push(`${q}.dwell_s must be > 0`);
+        else if (typeof st.caption !== 'string' || !st.caption) bad.push(`${q}.caption is required (자막 없는 투어 정지점)`);
+      });
+    });
+  }
+  const walk = (es, path) => (es || []).forEach((e, i) => {
+    if (!e || typeof e !== 'object') return;
+    const q = `${path}[${i}]`;
+    if (e.type === 'sound' && !(typeof e.caption === 'string' && e.caption)) bad.push(`${q} is a sound without caption (소리마다 자막이 필요하다)`);
+    if (e.type === 'character' && !(Array.isArray(e.lines) && e.lines.length && e.lines.every(x => typeof x === 'string' && x))) bad.push(`${q}.lines must be a non-empty list of strings (대사가 곧 자막이다)`);
+    (e.triggers || []).forEach((tr, k) => {
+      const r = `${q}.triggers[${k}]`;
+      if (!tr || typeof tr !== 'object' || !TRIGGER_ON.includes(tr.on)) { bad.push(`${r}.on must be tap|near`); return; }
+      if (tr.on === 'near' && !(isNum(tr.radius) && tr.radius > 0)) bad.push(`${r}.radius must be > 0 for near`);
+      (tr.do || []).forEach((a, m) => {
+        const act = a && typeof a === 'object' ? a.action : undefined;
+        if (!ACTIONS.includes(act)) bad.push(`${r}.do[${m}].action must be one of ${ACTIONS.join('|')}: ${JSON.stringify(act ?? null)}`);
+        else if (act === 'caption' && !(typeof a.text === 'string' && a.text)) bad.push(`${r}.do[${m}] caption needs text`);
+        else if (act === 'tour' && !tourIds.has(a.tour)) bad.push(`${r}.do[${m}] tour "${a.tour}" does not exist`);
+      });
+    });
+    if (Array.isArray(e.children)) walk(e.children, q + '.children');
+  });
+  walk(w.entities, 'entities');
 }
 
 // Extent of everything with a position (used when bounds is absent). Rough on purpose: for camera framing only.

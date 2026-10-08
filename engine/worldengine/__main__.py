@@ -10,6 +10,7 @@
     conform [--plugins DIR ...] [--out DIR]   conformance kit (G-05) for every plugin on the reference worlds + V-04 measurement
     generate <world.json> --plugin NAME [--out DIR]   one plugin, one world: artifact + recipe (G-01)
     studio --world W.json --artist NAME [--host 0.0.0.0] [--port 8100]   conversational studio (needs ANTHROPIC_API_KEY for the agent)
+    exhibit --world W.json [--host 0.0.0.0] [--port 8200]   show a work to visitors; live character replies if a key is set
     v13 [--limit N] [--yes]              intent-evaluation run against the real model (costs money: prints the bound first)
     site [--out DIR] [--no-smoke]        static site (runtime + three.js + worlds + landing page); smoke-loads every world
     draw [--urdf U] [--svg F --scale S --center X,Y] [--views aerial,top] [--save-world]
@@ -87,7 +88,12 @@ def main(argv=None) -> int:
     a = sub.add_parser("studio"); a.add_argument("--world", required=True); a.add_argument("--artist", required=True)
     a.add_argument("--host", default="127.0.0.1"); a.add_argument("--port", type=int, default=8100)
     a = sub.add_parser("v13"); a.add_argument("--limit", type=int); a.add_argument("--yes", action="store_true"); a.add_argument("--out", default=str(OUT))
+    a = sub.add_parser("exhibit"); a.add_argument("--world", required=True); a.add_argument("--host", default="127.0.0.1"); a.add_argument("--port", type=int, default=8200)
     a = ap.parse_args(argv)
+    if a.cmd == "exhibit":
+        from worldengine import exhibit, world as WD
+        exhibit.serve(WD.load(a.world), a.host, a.port)
+        return 0
     if a.cmd == "studio":
         from worldengine import world as WD
         from worldengine.studio import server

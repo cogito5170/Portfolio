@@ -10,6 +10,13 @@ const CSS = `
 .we-card{position:fixed;left:10px;top:calc(max(8px,env(safe-area-inset-top)) + 84px);width:min(360px,calc(100vw - 20px));max-height:60vh;overflow:auto;
   box-sizing:border-box;background:#fffffff2;color:#222;border-radius:12px;padding:12px 14px;font:13px/1.5 "Noto Sans KR","WenQuanYi Zen Hei",system-ui,sans-serif;box-shadow:0 2px 12px #0003}
 .we-card h3{margin:0 0 4px;font-size:15px}.we-card .src{color:#555;font-size:12px;margin:6px 0}.we-card li{margin:2px 0}.we-card .no{color:#b00}
+.we-talk{position:fixed;left:10px;right:10px;bottom:calc(max(10px,env(safe-area-inset-bottom)) + 120px);display:flex;gap:6px;z-index:7}
+.we-talk input{flex:1;min-height:44px;border-radius:10px;border:0;padding:0 10px;font:16px system-ui,sans-serif}
+.we-talk button{min-height:44px;border-radius:10px;border:0;padding:0 12px}
+.we-guide{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:9;padding:16px}
+.we-guide div{background:#fff;color:#222;border-radius:14px;padding:18px;max-width:420px;font:15px/1.6 "Noto Sans KR",system-ui,sans-serif}
+.we-guide button{min-height:48px;width:100%;margin-top:10px;border:0;border-radius:10px;background:#1b6ef3;color:#fff;font:inherit}
+.we-perf{position:fixed;right:10px;top:max(8px,env(safe-area-inset-top));background:#000c;color:#9f9;font:12px/1.4 monospace;padding:6px 8px;border-radius:8px;z-index:8;white-space:pre}
 .we-joy{position:fixed;display:none;width:0;height:0;pointer-events:none;z-index:5}
 .we-joy-base{position:absolute;left:-56px;top:-56px;width:112px;height:112px;border-radius:50%;background:#ffffff40;border:2px solid #ffffffb0}
 .we-joy-knob{position:absolute;left:-24px;top:-24px;width:48px;height:48px;border-radius:50%;background:#ffffffe0;box-shadow:0 1px 6px #0005}
@@ -44,6 +51,7 @@ export function hud(eng) {
     btn('개념', () => { card.hidden = !card.hidden; });
     if (new URLSearchParams(location.search).has('card')) card.hidden = false;   // link that opens on the concept card
   }
+  for (const t of eng.world.tours || []) btn('투어' + ((eng.world.tours.length > 1) ? ' · ' + (t.title || t.id) : ''), () => eng.startTour(t.id));
   const bOrbit = btn('둘러보기', () => eng.setMode('orbit')), bWalk = btn('걷기', () => eng.setMode('walk'));
   const bAdult = btn('어른 눈높이', () => eng.setEye('adult')), bChild = btn('아이 눈높이', () => eng.setEye('child'));
   const help = () => eng.mode === 'walk'
@@ -61,4 +69,34 @@ export function hud(eng) {
   };
   for (const ev of ['mode', 'eye', 'view']) eng.on(ev, refresh);
   refresh();
+}
+
+// First-visit guide (XR-11): what to do, in one screen. Its button is also the gesture that lets sound start.
+export function guide(eng) {
+  let seen = false;
+  try { seen = localStorage.getItem('we-guide-seen') === '1'; } catch (_) { /* storage blocked: show it */ }
+  if (seen) return;
+  const touch = matchMedia('(pointer: coarse)').matches, d = document.createElement('div'); d.className = 'we-guide';
+  const box = document.createElement('div');
+  const lines = [eng.world.name, touch ? '한 손가락으로 돌려 보고, 두 손가락으로 가까이 가요.' : '끌어서 돌려 보고, 휠로 가까이 가요.',
+    '「걷기」를 누르면 ' + (touch ? '왼쪽 엄지로' : 'WASD 로') + ' 걸어 다녀요.', '빛나는 것을 누르거나 가까이 가면 무언가 일어나요.',
+    (eng.world.tours || []).length ? '「투어」를 누르면 작가가 정한 길로 안내해요.' : '', '소리는 시작을 누른 뒤에 나고, 모든 소리와 말은 자막으로도 나와요.'].filter(Boolean);
+  lines.forEach((t, i) => { const p = document.createElement(i ? 'p' : 'b'); p.textContent = t; box.appendChild(p); });
+  const b = document.createElement('button'); b.textContent = '시작'; b.onclick = () => { d.remove(); try { localStorage.setItem('we-guide-seen', '1'); } catch (_) { /* ignore */ } };
+  box.appendChild(b); d.appendChild(box); document.body.appendChild(d);
+}
+
+// Measurement overlay (V-17, ?perf=1): numbers of THIS device. CI headless numbers are not V-17.
+export function perf(eng, loadMs) {
+  const d = document.createElement('div'); d.className = 'we-perf'; document.body.appendChild(d);
+  let n = 0, t0 = performance.now(), fps = 0, worst = 0, last = performance.now();
+  eng.on('step', () => {
+    const now = performance.now(); worst = Math.max(worst, now - last); last = now; n++;
+    if (now - t0 > 1000) {
+      fps = n * 1000 / (now - t0); n = 0; t0 = now;
+      const mem = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(0) + ' MB' : '측정 불가(이 브라우저)';
+      d.textContent = `이 기기 측정값\nFPS ${fps.toFixed(1)}  최악 프레임 ${worst.toFixed(0)} ms\n첫 로딩 ${loadMs.toFixed(0)} ms\nJS 힙 ${mem}\n저사양 ${eng.lowspec ? '켜짐' : '꺼짐'}  ${eng.size[0]}×${eng.size[1]} @${eng.renderer.getPixelRatio()}x`;
+      worst = 0; window.__perf = { fps, loadMs, lowspec: eng.lowspec };
+    }
+  });
 }

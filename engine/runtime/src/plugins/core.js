@@ -2,6 +2,7 @@
 // (objects stand on pos), except light/text/path which are placed exactly at pos.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { fallHeight } from '../physics.js';
 
 const UP = g => g.rotateX(Math.PI / 2);                  // three primitives are Y-up; turn them to Z-up
 const mesh = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; return m; };
@@ -112,6 +113,16 @@ export const core = {
         return g;
       },
     },
+    sound: {
+      doc: 'a sound source in space (no audio files); starts only after the visitor touches/clicks once; caption required',
+      fields: { caption: 'str (required)', recipe: 'tone|chord|noise|pulse', freq: 'Hz', freqs: '[Hz]', wave: 'sine|square|sawtooth|triangle', rate: 'Hz (pulse)', volume: '0..1', visible: 'bool' },
+      build(e, c) {
+        const g = new THREE.Group();
+        if (e.visible !== false) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x9fe8ff, emissiveIntensity: 1.5 })); g.add(m); }
+        if (c.audio) c.audio.register(g, e);
+        return g;
+      },
+    },
     arch: {
       doc: 'round arch: two piers and a semicircular head, opening along y', fields: { width: 'opening m', height: 'spring height m', depth: 'm', thickness: 'pier m' },
       build(e, c) {
@@ -129,6 +140,9 @@ export const core = {
     // Behaviours run every frame with the object's base transform kept in obj.userData.base.
     spin(o, b, t) { const ax = b.axis || 'z', w = (b.deg_per_s ?? 30) * Math.PI / 180; o.rotation[ax] = o.userData.base.rot[ax] + w * t; },
     bob(o, b, t) { o.position.z = o.userData.base.pos.z + (b.amp ?? 0.1) * Math.sin(2 * Math.PI * (b.hz ?? 0.5) * t); },
+    fall(o, b, t, dt, eng) {     // dropped from `height` above its place; gravity from rules.physics (XR-03)
+      o.position.z = o.userData.base.pos.z + fallHeight(t, b.height ?? 2, eng ? eng.phys.g : 9.81, b.restitution ?? 0.5);
+    },
     orbit(o, b, t) {
       const c = b.center || [o.userData.base.pos.x, o.userData.base.pos.y], r = b.radius ?? 1, a = 2 * Math.PI * t / (b.period_s ?? 8);
       o.position.x = c[0] + r * Math.cos(a); o.position.y = c[1] + r * Math.sin(a); if (b.face) o.rotation.z = a + Math.PI / 2;

@@ -112,7 +112,8 @@ def render(html_path, png_path, view: str = "aerial", w: int = 1600, h: int = 10
 
 
 def render_world(world, png_path, view: str = "aerial", w: int = 1280, h: int = 800, mode: str = "orbit",
-                 eye: "str | None" = None, t: float = 0.0, selftest: "str | None" = None, timeout_s: float = 240.0) -> dict:
+                 eye: "str | None" = None, t: float = 0.0, selftest: "str | None" = None, timeout_s: float = 240.0,
+                 query: "dict | None" = None) -> dict:
     """A world (dict or path to world JSON) through the modular runtime (engine/runtime). Same honesty rules.
 
     With selftest=<name>, the page runs that in-browser test and its measurements come back as r["result"]."""
@@ -131,6 +132,8 @@ def render_world(world, png_path, view: str = "aerial", w: int = 1280, h: int = 
             q += "&eye=" + eye
         if selftest:
             q += "&selftest=" + selftest
+        for k, v in (query or {}).items():
+            q += "&%s=%s" % (k, v)
         return _shoot(tmp, q, png_path, w, h, timeout_s)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
