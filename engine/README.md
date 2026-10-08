@@ -39,6 +39,8 @@ python3 -m worldengine draw --svg my.svg --scale 0.002   # M/L/H/V/Z 경로만. 
 
 ## 출처
 
+파일별 원본 blob 해시와 변경 여부는 [`PROVENANCE.md`](PROVENANCE.md) (테스트가 해시를 다시 계산해 확인한다).
+
 `cogito5170/se_new@02e87d5` 의 `render3d/`(gentle_monster 3D 도구)에서 가져왔다. 패키지 이름만 `render3d` → `worldengine` 로 바꿨다.
 
 | 가져온 것 | 바뀐 점 |

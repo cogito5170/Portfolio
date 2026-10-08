@@ -15,6 +15,9 @@ jobs:
           out=$(npx --yes @puppeteer/browsers@2.6.1 install chrome-headless-shell@stable --path "$RUNNER_TEMP/browsers")
           echo "$out"
           echo "WE_CHROMIUM=$(echo "$out" | tail -1 | awk '{print $2}')" >> "$GITHUB_ENV"
+      - name: JS unit tests (node --test; also run from the Python suite)
+        working-directory: engine
+        run: node --version && node --test runtime/tests/*.test.mjs
       - name: Unit + headless render tests
         working-directory: engine
         run: |
