@@ -54,6 +54,7 @@ export function check(w, knownTypes = null) {
     if (pl.eye !== undefined && !(pl.eye in { ...EYE_HEIGHTS, ...(pl.eye_heights || {}) })) bad.push(`player.eye unknown: "${pl.eye}"`);
   }
   checkConcepts(w, ids, bad);
+  checkRules(w, bad);
   const mode = w.controls && w.controls.default;
   if (mode !== undefined && !['orbit', 'walk'].includes(mode)) bad.push(`controls.default must be orbit|walk: "${mode}"`);
   return bad;
@@ -84,6 +85,37 @@ function checkConcepts(w, ids, bad) {
     (c.rules || []).forEach((r, j) => { if (!r || typeof r !== 'object' || typeof r.param !== 'string' || !('value' in r)) bad.push(`${p}.rules[${j}] needs param and value`); });
     for (const d of c.drives || []) if (!ids.has(d)) bad.push(`${p}.drives "${d}" is not an entity id`);
   });
+}
+
+export const AXES = ['density', 'colour', 'form', 'texture', 'motion', 'sound', 'narrative'];
+export const CONSTRAINT_KINDS = ['dimension_series', 'palette', 'max_elements'];
+
+// World ingredient (rules), Expression ingredient (expressions), version/fork: same as world.py _check_rules.
+function checkRules(w, bad) {
+  const r = w.rules;
+  if (r !== undefined && r !== null) {
+    if (typeof r !== 'object' || Array.isArray(r)) bad.push('rules must be an object');
+    else {
+      const ax = r.axes ?? {};
+      if (typeof ax !== 'object' || Array.isArray(ax)) bad.push('rules.axes must be an object');
+      else for (const [k, v] of Object.entries(ax)) if (!isNum(v) || v < 0 || v > 1) bad.push(`rules.axes.${k} must be a number in [0,1]: ${JSON.stringify(v ?? null)}`);
+      (r.constraints || []).forEach((c, i) => {
+        const p = `rules.constraints[${i}]`, kind = c && typeof c === 'object' ? c.kind : undefined;
+        if (!CONSTRAINT_KINDS.includes(kind)) bad.push(`${p}.kind must be one of ${CONSTRAINT_KINDS.join('|')}: ${JSON.stringify(kind ?? null)}`);
+        else if (kind === 'dimension_series' && !(Array.isArray(c.values_m) && c.values_m.length && c.values_m.every(x => isNum(x) && x > 0))) bad.push(`${p}.values_m must be a non-empty list of positive numbers`);
+        else if (kind === 'palette' && !(Array.isArray(c.colours) && c.colours.length && c.colours.every(x => typeof x === 'string' && x.length === 7 && x[0] === '#'))) bad.push(`${p}.colours must be a non-empty list of "#rrggbb"`);
+        else if (kind === 'max_elements' && !(Number.isInteger(c.value) && c.value > 0)) bad.push(`${p}.value must be a positive integer`);
+      });
+    }
+  }
+  const ex = w.expressions;
+  if (ex !== undefined && ex !== null) {
+    if (!Array.isArray(ex)) bad.push('expressions must be a list');
+    else ex.forEach((e, i) => { if (!e || typeof e !== 'object' || typeof e.medium !== 'string' || !e.medium) bad.push(`expressions[${i}].medium must be a non-empty string`); });
+  }
+  if ('version' in w && !(typeof w.version === 'string' && w.version)) bad.push('version must be a non-empty string');
+  const fk = w.forked_from;
+  if (fk !== undefined && fk !== null && !(typeof fk === 'object' && typeof fk.world === 'string' && fk.world)) bad.push('forked_from.world must name the parent world');
 }
 
 // Extent of everything with a position (used when bounds is absent). Rough on purpose: for camera framing only.

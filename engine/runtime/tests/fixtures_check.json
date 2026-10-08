@@ -255,5 +255,128 @@
     "id": "x"
    }
   }
+ },
+ {
+  "name": "five ingredients ok",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "version": "1.0",
+   "forked_from": {
+    "world": "parent",
+    "version": "0.3"
+   },
+   "entities": [],
+   "rules": {
+    "axes": {
+     "density": 0.1,
+     "colour": 0,
+     "smell": 1
+    },
+    "constraints": [
+     {
+      "kind": "dimension_series",
+      "values_m": [
+       0.43,
+       0.7
+      ]
+     },
+     {
+      "kind": "palette",
+      "colours": [
+       "#000000"
+      ]
+     },
+     {
+      "kind": "max_elements",
+      "value": 3
+     }
+    ]
+   },
+   "expressions": [
+    {
+     "medium": "web3d"
+    },
+    {
+     "medium": "image",
+     "plugin": "image_svg"
+    }
+   ]
+  }
+ },
+ {
+  "name": "five ingredients bad",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "version": "",
+   "forked_from": {},
+   "entities": [],
+   "rules": {
+    "axes": {
+     "density": 2,
+     "colour": "red",
+     "form": null
+    },
+    "constraints": [
+     {
+      "kind": "vibe"
+     },
+     {
+      "kind": "dimension_series",
+      "values_m": [
+       0,
+       1
+      ]
+     },
+     {
+      "kind": "palette",
+      "colours": [
+       "red"
+      ]
+     },
+     {
+      "kind": "max_elements",
+      "value": 1.5
+     },
+     7
+    ]
+   },
+   "expressions": [
+    {
+     "plugin": "x"
+    },
+    {
+     "medium": ""
+    }
+   ]
+  }
+ },
+ {
+  "name": "rules and expressions wrong type",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [],
+   "rules": [
+    1
+   ],
+   "expressions": {
+    "medium": "web3d"
+   }
+  }
+ },
+ {
+  "name": "axes not object",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [],
+   "rules": {
+    "axes": [
+     0.5
+    ]
+   }
+  }
  }
 ]

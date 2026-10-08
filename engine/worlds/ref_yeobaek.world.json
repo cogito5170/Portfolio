@@ -1,0 +1,181 @@
+{
+ "format": "world/1",
+ "name": "기준 세계 A — 여백",
+ "version": "1.0",
+ "about": "기준 세계관 — 표현력 시험 세트(SPEC 5절)용. 인터뷰 작가와 무관하게 일부러 극단으로 정했다 (7.1절). 거의 아무것도 없는 세계.",
+ "bounds": [
+  20,
+  20,
+  6
+ ],
+ "concepts": [
+  {
+   "id": "emptiness",
+   "title": "비움",
+   "statement": "그리지 않은 곳이 작품의 대부분이다. 하나를 놓으면 나머지는 비워 둔다.",
+   "sources": [
+    {
+     "who": "World Platform 기준 세계관",
+     "kind": "own",
+     "note": "특정 작가·전통의 인용이 아니다"
+    }
+   ],
+   "rules": [
+    {
+     "param": "rules.max_elements",
+     "value": 7,
+     "why": "놓을 수 있는 것은 일곱 개까지"
+    }
+   ],
+   "drives": [
+    "line"
+   ]
+  }
+ ],
+ "rules": {
+  "axes": {
+   "density": 0.05,
+   "colour": 0.05,
+   "form": 0.3,
+   "texture": 0.05,
+   "motion": 0.05,
+   "sound": 0.0,
+   "narrative": 0.1
+  },
+  "constraints": [
+   {
+    "kind": "palette",
+    "colours": [
+     "#f7f5f0",
+     "#1b1b1b"
+    ]
+   },
+   {
+    "kind": "max_elements",
+    "value": 7
+   }
+  ]
+ },
+ "expressions": [
+  {
+   "medium": "web3d"
+  },
+  {
+   "medium": "image",
+   "plugin": "image_svg"
+  },
+  {
+   "medium": "drawing",
+   "plugin": "plotter"
+  }
+ ],
+ "environment": {
+  "background": "#f7f5f0",
+  "exposure": 1.0,
+  "ambient": 1.0,
+  "sun": {
+   "intensity": 1.2
+  },
+  "fog": {
+   "density": 0.03,
+   "color": "#f7f5f0"
+  }
+ },
+ "materials": {
+  "paper": {
+   "color": "#f7f5f0",
+   "roughness": 1
+  },
+  "ink": {
+   "color": "#1b1b1b",
+   "roughness": 0.8
+  }
+ },
+ "entities": [
+  {
+   "id": "ground",
+   "type": "plane",
+   "pos": [
+    10,
+    10,
+    0
+   ],
+   "size": [
+    20,
+    20
+   ],
+   "material": "paper"
+  },
+  {
+   "id": "line",
+   "type": "box",
+   "pos": [
+    10,
+    11,
+    0
+   ],
+   "size": [
+    0.04,
+    6,
+    0.04
+   ],
+   "material": "ink"
+  },
+  {
+   "id": "stone",
+   "type": "sphere",
+   "pos": [
+    13.5,
+    15,
+    0
+   ],
+   "radius": 0.15,
+   "material": "ink",
+   "behaviors": [
+    {
+     "type": "bob",
+     "amp": 0.02,
+     "hz": 0.05
+    }
+   ]
+  }
+ ],
+ "views": {
+  "aerial": {
+   "pos": [
+    3,
+    -2,
+    9
+   ],
+   "target": [
+    10,
+    11,
+    0
+   ],
+   "fov": 45
+  },
+  "eye": {
+   "pos": [
+    10,
+    3,
+    1.7
+   ],
+   "target": [
+    10,
+    14,
+    0.3
+   ],
+   "fov": 60
+  }
+ },
+ "player": {
+  "spawn": [
+   10,
+   3
+  ],
+  "yaw_deg": 90
+ },
+ "controls": {
+  "default": "orbit"
+ }
+}

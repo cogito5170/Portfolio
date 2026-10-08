@@ -82,6 +82,7 @@ def check(w, known_types=None) -> "list[str]":
         if "eye" in pl and pl["eye"] not in {**EYE_HEIGHTS, **(pl.get("eye_heights") or {})}:
             bad.append('player.eye unknown: "%s"' % pl["eye"])
     _check_concepts(w, ids, bad)
+    _check_rules(w, bad)
     mode = (w.get("controls") or {}).get("default")
     if mode is not None and mode not in ("orbit", "walk"):
         bad.append('controls.default must be orbit|walk: "%s"' % mode)
@@ -130,6 +131,50 @@ def _check_concepts(w, ids, bad):
         for d in c.get("drives") or []:
             if d not in ids:
                 bad.append('%s.drives "%s" is not an entity id' % (p, d))
+
+
+AXES = ("density", "colour", "form", "texture", "motion", "sound", "narrative")   # P2 base axes; worlds may add more
+CONSTRAINT_KINDS = ("dimension_series", "palette", "max_elements")
+
+
+def _check_rules(w, bad):
+    """World ingredient (rules: style axes + constraints), Expression ingredient (expressions), version/fork."""
+    r = w.get("rules")
+    if r is not None:
+        if not isinstance(r, dict):
+            bad.append("rules must be an object")
+        else:
+            ax = r.get("axes", {})
+            if not isinstance(ax, dict):
+                bad.append("rules.axes must be an object")
+            else:
+                for k, v in ax.items():
+                    if not _num(v) or not 0 <= v <= 1:
+                        bad.append("rules.axes.%s must be a number in [0,1]: %s" % (k, _js(v)))
+            for i, c in enumerate(r.get("constraints") or []):
+                p = "rules.constraints[%d]" % i
+                kind = c.get("kind") if isinstance(c, dict) else None
+                if kind not in CONSTRAINT_KINDS:
+                    bad.append('%s.kind must be one of %s: %s' % (p, "|".join(CONSTRAINT_KINDS), _js(kind)))
+                elif kind == "dimension_series" and not (isinstance(c.get("values_m"), list) and c["values_m"] and all(_num(x) and x > 0 for x in c["values_m"])):
+                    bad.append("%s.values_m must be a non-empty list of positive numbers" % p)
+                elif kind == "palette" and not (isinstance(c.get("colours"), list) and c["colours"] and all(isinstance(x, str) and len(x) == 7 and x[0] == "#" for x in c["colours"])):
+                    bad.append('%s.colours must be a non-empty list of "#rrggbb"' % p)
+                elif kind == "max_elements" and not (isinstance(c.get("value"), int) and not isinstance(c.get("value"), bool) and c["value"] > 0):
+                    bad.append("%s.value must be a positive integer" % p)
+    ex = w.get("expressions")
+    if ex is not None:
+        if not isinstance(ex, list):
+            bad.append("expressions must be a list")
+        else:
+            for i, e in enumerate(ex):
+                if not isinstance(e, dict) or not isinstance(e.get("medium"), str) or not e.get("medium"):
+                    bad.append("expressions[%d].medium must be a non-empty string" % i)
+    if "version" in w and not (isinstance(w["version"], str) and w["version"]):
+        bad.append("version must be a non-empty string")
+    fk = w.get("forked_from")
+    if fk is not None and not (isinstance(fk, dict) and isinstance(fk.get("world"), str) and fk.get("world")):
+        bad.append("forked_from.world must name the parent world")
 
 
 def from_scene(sc: dict) -> dict:
