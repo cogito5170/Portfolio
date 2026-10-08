@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>World Platform 스튜디오</title>
+<style>
+:root{--bg:#f4f1ea;--ink:#1f2328;--sub:#5b616b;--card:#fff;--line:#e3dfd6;--accent:#1b6ef3;--warn:#b54708}
+@media (prefers-color-scheme:dark){:root{--bg:#15171b;--ink:#e8e6e1;--sub:#a3a8b0;--card:#1e2126;--line:#2c3036;--accent:#7aa7ff;--warn:#f79009}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Noto Sans KR",system-ui,sans-serif;height:100dvh;display:flex;flex-direction:column}
+#view{flex:0 0 42dvh;border:0;width:100%;background:#000}
+@media (min-width:900px){body{flex-direction:row}#view{flex:1 1 60%;height:100dvh}#side{flex:0 0 40%;height:100dvh}}
+#side{flex:1;display:flex;flex-direction:column;min-height:0}
+#log{flex:1;overflow:auto;padding:10px 12px}
+.msg{margin:6px 0;padding:8px 10px;border-radius:12px;max-width:92%;white-space:pre-wrap}.me{background:var(--accent);color:#fff;margin-left:auto}.ai{background:var(--card);border:1px solid var(--line)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0}.card h4{margin:0 0 4px;font-size:14px}
+.card ul{margin:4px 0 6px 18px;padding:0}.why{color:var(--sub);font-size:13px}.warn{border-color:var(--warn)}.warn h4{color:var(--warn)}
+button{min-height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;margin:2px}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.sl{display:flex;align-items:center;gap:6px;font-size:13px}.sl input{flex:1}
+form{display:flex;gap:6px;padding:8px;border-top:1px solid var(--line);background:var(--bg);padding-bottom:max(8px,env(safe-area-inset-bottom))}
+#txt{flex:1;min-height:44px;border-radius:12px;border:1px solid var(--line);padding:8px;font:inherit;background:var(--card);color:var(--ink)}
+#err{color:var(--warn);font-size:13px;padding:0 12px}
+</style></head><body>
+<iframe id="view" title="세계 미리보기"></iframe>
+<div id="side"><div id="log" aria-live="polite"></div><div id="err"></div>
+<form id="f"><label><input id="img" type="file" accept="image/*" hidden multiple><button type="button" id="att" aria-label="이미지 붙이기">＋</button></label>
+<textarea id="txt" rows="1" placeholder="무엇을 바꿀까요? (사진도 붙일 수 있어요)"></textarea><button class="primary">보내기</button></form></div>
+<script>
+const T = new URLSearchParams(location.search).get('t') || '';
+const api = (p, body) => fetch('/api/' + p + (p.includes('?') ? '&' : '?') + 't=' + encodeURIComponent(T), body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}).then(r => r.json());
+const log = document.getElementById('log'), err = document.getElementById('err'), view = document.getElementById('view');
+let images = [];
+const show = (src) => { view.src = '/runtime/index.html?world=' + encodeURIComponent(src + (src.includes('?') ? '&' : '?') + 't=' + T); };
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const bubble = (who, text) => { const m = el('div', 'msg ' + who, text); log.appendChild(m); log.scrollTop = 1e9; };
+const AXKO = { density: '밀도', colour: '색', form: '형태', texture: '질감', motion: '움직임', sound: '소리', narrative: '서사' };
+
+function proposalCard(p) {
+  const c = el('div', 'card'); c.appendChild(el('h4', '', (p.label ? '시안 ' + p.label + ' — ' : '') + '이렇게 이해했어요'));
+  const ul = el('ul'); for (const l of p.understood_as) ul.appendChild(el('li', '', l)); c.appendChild(ul);
+  c.appendChild(el('div', 'why', p.why));
+  const edits = {};
+  if (p.kind === 'axes' || p.kind === 'variant') for (const [k, v] of Object.entries(p.axes)) {
+    const row = el('label', 'sl'); row.appendChild(el('span', '', AXKO[k] || k)); const r = document.createElement('input');
+    Object.assign(r, { type: 'range', min: 0, max: 1, step: 0.01, value: v }); const out = el('span', '', (+v).toFixed(2));
+    r.oninput = () => { edits[k] = +r.value; out.textContent = (+r.value).toFixed(2); }; row.append(r, out); c.appendChild(row);
+  }
+  const b = (t, f, cls) => { const x = el('button', cls, t); x.type = 'button'; x.onclick = f; c.appendChild(x); };
+  b('미리보기', () => show('/api/world.json?proposal=' + p.id));
+  b('적용', async () => { const r = await api('apply', { proposal: p.id, axes: Object.keys(edits).length ? edits : undefined }); if (r.error) err.textContent = r.error; refresh(); show('/api/world.json'); }, 'primary');
+  b('버리기', async () => { await api('reject', { proposal: p.id, note: '' }); refresh(); });
+  return c;
+}
+function approvalCard(a) {
+  const c = el('div', 'card warn'); c.appendChild(el('h4', '', '승인이 필요해요: ' + a.kind)); c.appendChild(el('div', '', a.message)); c.appendChild(el('div', 'why', a.why));
+  const ok = el('button', 'primary', '승인'), no = el('button', '', '거절'); ok.type = no.type = 'button';
+  ok.onclick = async () => { const r = await api('approve', { approval: a.id }); bubble('ai', JSON.stringify(r)); refresh(); };
+  no.onclick = async () => { await api('decline', { approval: a.id }); refresh(); };
+  c.append(ok, no); return c;
+}
+let shown = new Set();
+async function refresh() {
+  const s = await api('state');
+  if (s.error) { err.textContent = '연결이 끊겼어요: ' + s.error; return; }
+  err.textContent = s.agent ? '' : '에이전트가 연결돼 있지 않아요 — 제안을 적용·되돌리는 화면만 쓸 수 있어요.';
+  for (const p of s.proposals) if (p.status === 'pending' && !shown.has(p.id)) { shown.add(p.id); log.appendChild(proposalCard(p)); }
+  for (const a of s.approvals) if (a.status === 'waiting' && !shown.has(a.id)) { shown.add(a.id); log.appendChild(approvalCard(a)); }
+  for (const v of s.variant_sets) if (!shown.has(v.id)) { shown.add(v.id); const c = el('div', 'card'); c.appendChild(el('h4', '', '시안 비교 보드')); const a = el('a', '', '나란히 보기 열기'); a.href = '/api/board/' + v.id + '?t=' + T; a.target = '_blank'; c.appendChild(a); log.appendChild(c); }
+  log.scrollTop = 1e9;
+}
+document.getElementById('att').onclick = () => document.getElementById('img').click();
+document.getElementById('img').onchange = async (e) => {
+  images = [];
+  for (const f of [...e.target.files].slice(0, 4)) {           // downscale to <= 1568 px before sending
+    const bmp = await createImageBitmap(f), k = Math.min(1, 1568 / Math.max(bmp.width, bmp.height)), cv = document.createElement('canvas');
+    cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k); cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+    images.push({ media_type: 'image/jpeg', data: cv.toDataURL('image/jpeg', 0.85).split(',')[1] });
+  }
+  bubble('me', '이미지 ' + images.length + '장');
+};
+document.getElementById('f').onsubmit = async (e) => {
+  e.preventDefault(); const t = document.getElementById('txt'); if (!t.value.trim()) return;
+  bubble('me', t.value); const body = { text: t.value, images }; t.value = ''; images = [];
+  const r = await api('message', body);
+  if (r.error) { err.textContent = r.error; return; }
+  if (r.reply) bubble('ai', r.reply);
+  for (const x of r.refusals || []) { const c = el('div', 'card warn'); c.appendChild(el('h4', '', '지금은 못 해요')); c.appendChild(el('div', '', x.reason)); const ul = el('ul'); for (const a of x.alternatives) ul.appendChild(el('li', '', a)); c.appendChild(ul); log.appendChild(c); }
+  refresh();
+};
+show('/api/world.json'); refresh();
+</script></body></html>

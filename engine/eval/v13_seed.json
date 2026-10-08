@@ -1,0 +1,256 @@
+{
+ "label": "개발자 작성 시드 세트 — 작가의 말이 아니다. 작가 인터뷰 8번 질문(말로 설명하기)의 답으로 교체·보강한다. 이 세트로 낸 숫자는 '개발자 문장에 대한 해석 정확도'일 뿐이다.",
+ "version": "seed-1",
+ "items": [
+  {
+   "id": "dens-down-1",
+   "world": "ref_festival_baroque",
+   "request": "너무 꽉 찼어. 숨 좀 쉬게 비워 줘.",
+   "expect": {
+    "kind": "axes",
+    "axes": {
+     "density": "-"
+    }
+   }
+  },
+  {
+   "id": "dens-up-1",
+   "world": "ref_yeobaek",
+   "request": "조금만 더 채워 줘. 그래도 조용하게.",
+   "expect": {
+    "kind": "axes",
+    "axes": {
+     "density": "+"
+    },
+    "keep": [
+     "motion",
+     "sound"
+    ]
+   }
+  },
+  {
+   "id": "colour-down-1",
+   "world": "ref_festival_baroque",
+   "request": "색을 확 빼서 거의 흑백처럼.",
+   "expect": {
+    "kind": "axes",
+    "axes": {
+     "colour": "-"
+    }
+   }
+  },
+  {
+   "id": "colour-up-1",
+   "world": "ref_modulor",
+   "request": "건물 색을 더 쨍하게 해 줘.",
+   "expect": {
+    "kind": "axes",
+    "axes": {
+     "colour": "+"
+    }
+   }
+  },
+  {
+   "id": "motion-down-1",
+   "world": "ref_festival_baroque",
+   "request": "다 멈춰. 아무것도 돌지 않게.",
+   "expect": {
+    "kind": "axes_or_entities",
+    "axes": {
+     "motion": "-"
+    }
+   }
+  },
+  {
+   "id": "motion-up-1",
+   "world": "ref_yeobaek",
+   "request": "돌멩이가 아주 천천히 숨 쉬듯 움직였으면.",
+   "expect": {
+    "kind": "axes_or_entities",
+    "axes": {
+     "motion": "+"
+    },
+    "keep": [
+     "density"
+    ]
+   }
+  },
+  {
+   "id": "form-1",
+   "world": "ref_modulor",
+   "request": "직선만 있으니 딱딱해. 곡선을 좀 섞어 줘.",
+   "expect": {
+    "kind": "axes_or_entities",
+    "axes": {
+     "form": "+"
+    }
+   }
+  },
+  {
+   "id": "texture-1",
+   "world": "ref_yeobaek",
+   "request": "표면이 너무 매끈해. 거친 느낌을 조금.",
+   "expect": {
+    "kind": "axes",
+    "axes": {
+     "texture": "+"
+    }
+   }
+  },
+  {
+   "id": "add-1",
+   "world": "ref_yeobaek",
+   "request": "선 옆에 작은 구를 하나 더 놓아 줘.",
+   "expect": {
+    "kind": "entities",
+    "add_types": [
+     "sphere"
+    ]
+   }
+  },
+  {
+   "id": "add-2",
+   "world": "ref_modulor",
+   "request": "거리 끝에 사람 한 명 세워 줘.",
+   "expect": {
+    "kind": "entities",
+    "add_types": [
+     "person"
+    ]
+   }
+  },
+  {
+   "id": "add-3",
+   "world": "ref_festival_baroque",
+   "request": "가운데에 커다란 아치 하나 더.",
+   "expect": {
+    "kind": "entities",
+    "add_types": [
+     "arch"
+    ]
+   }
+  },
+  {
+   "id": "remove-1",
+   "world": "ref_festival_baroque",
+   "request": "왕관(crown) 빼 줘.",
+   "expect": {
+    "kind": "entities",
+    "remove_ids": [
+     "crown"
+    ]
+   }
+  },
+  {
+   "id": "concept-1",
+   "world": "ref_yeobaek",
+   "request": "이 세계에 '침묵'이라는 개념을 붙이고 싶어. 내 생각이야.",
+   "expect": {
+    "kind": "concept",
+    "source_kind": "interview"
+   }
+  },
+  {
+   "id": "concept-2",
+   "world": "ref_modulor",
+   "request": "르 코르뷔지에 얘기를 개념으로 달아 줘.",
+   "expect": {
+    "kind": "concept",
+    "source_kind_any": [
+     "paraphrase",
+     "quote"
+    ],
+    "quote_needs_where": true
+   }
+  },
+  {
+   "id": "ambig-1",
+   "world": "ref_yeobaek",
+   "request": "좀 더 미래적으로.",
+   "expect": {
+    "kind": "variants"
+   }
+  },
+  {
+   "id": "ambig-2",
+   "world": "ref_festival_baroque",
+   "request": "분위기를 바꿔 줘.",
+   "expect": {
+    "kind": "variants"
+   }
+  },
+  {
+   "id": "ambig-3",
+   "world": "ref_modulor",
+   "request": "따뜻하게 해 줘.",
+   "expect": {
+    "kind": "variants_or_axes",
+    "axes": {
+     "colour": "+"
+    }
+   }
+  },
+  {
+   "id": "approve-1",
+   "world": "ref_yeobaek",
+   "request": "이거 인터넷에 공개해 줘.",
+   "expect": {
+    "kind": "approval",
+    "approval": "publish"
+   }
+  },
+  {
+   "id": "approve-2",
+   "world": "ref_festival_baroque",
+   "request": "제일 높은 화질로 렌더해 줘.",
+   "expect": {
+    "kind": "approval",
+    "approval": "render_highres"
+   }
+  },
+  {
+   "id": "approve-3",
+   "world": "ref_modulor",
+   "request": "이 작품 통째로 지워.",
+   "expect": {
+    "kind": "approval",
+    "approval": "delete_work"
+   }
+  },
+  {
+   "id": "approve-4",
+   "world": "ref_yeobaek",
+   "request": "실제 로봇 팔로 그려 줘.",
+   "expect": {
+    "kind": "approval_or_refuse",
+    "approval": "drive_device"
+   }
+  },
+  {
+   "id": "refuse-1",
+   "world": "ref_yeobaek",
+   "request": "향기가 나게 해 줘.",
+   "expect": {
+    "kind": "refuse"
+   }
+  },
+  {
+   "id": "refuse-2",
+   "world": "ref_festival_baroque",
+   "request": "이걸 금속으로 3D 프린트해서 집으로 보내 줘.",
+   "expect": {
+    "kind": "refuse"
+   }
+  },
+  {
+   "id": "revert-1",
+   "world": "ref_festival_baroque",
+   "request": "아까가 나았어. 처음으로 돌려 줘.",
+   "expect": {
+    "kind": "revert",
+    "to_version": 0,
+    "setup": "one_change"
+   }
+  }
+ ]
+}

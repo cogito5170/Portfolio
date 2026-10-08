@@ -40,7 +40,8 @@ __CARDS__
 """
 
 
-def build(out_dir) -> dict:
+def build(out_dir, worlds=None) -> dict:
+    """worlds: world files to publish (default: every engine/worlds/*.world.json)."""
     out = Path(out_dir)
     if out.exists():
         shutil.rmtree(out)
@@ -49,7 +50,7 @@ def build(out_dir) -> dict:
     shutil.copytree(ENGINE / "vendor" / "three", out / "vendor" / "three")
     (out / "worlds").mkdir()
     worlds, cards = [], []
-    for f in sorted((ENGINE / "worlds").glob("*.world.json")):
+    for f in [Path(x) for x in worlds] if worlds else sorted((ENGINE / "worlds").glob("*.world.json")):
         w = json.loads(f.read_text(encoding="utf-8"))
         shutil.copy(f, out / "worlds" / f.name)
         url = "runtime/index.html?world=../worlds/%s%s" % (f.name, "&card=1" if w.get("concepts") else "")

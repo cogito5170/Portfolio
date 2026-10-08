@@ -9,6 +9,8 @@
     serve [--port 8000] [--host 0.0.0.0] serve engine/ so a phone or PC on the same network can open the runtime
     conform [--plugins DIR ...] [--out DIR]   conformance kit (G-05) for every plugin on the reference worlds + V-04 measurement
     generate <world.json> --plugin NAME [--out DIR]   one plugin, one world: artifact + recipe (G-01)
+    studio --world W.json --artist NAME [--host 0.0.0.0] [--port 8100]   conversational studio (needs ANTHROPIC_API_KEY for the agent)
+    v13 [--limit N] [--yes]              intent-evaluation run against the real model (costs money: prints the bound first)
     site [--out DIR] [--no-smoke]        static site (runtime + three.js + worlds + landing page); smoke-loads every world
     draw [--urdf U] [--svg F --scale S --center X,Y] [--views aerial,top] [--save-world]
                                          drawing robot: plan, verify (V-16), write a world, render it mid-drawing and done
@@ -82,7 +84,17 @@ def main(argv=None) -> int:
     a = sub.add_parser("site"); a.add_argument("--out", default=str(ENGINE / "build" / "site")); a.add_argument("--no-smoke", action="store_true")
     a = sub.add_parser("conform"); a.add_argument("--plugins", nargs="*", default=[]); a.add_argument("--out", default=str(OUT))
     a = sub.add_parser("generate"); a.add_argument("world"); a.add_argument("--plugin", required=True); a.add_argument("--out", default=str(OUT))
+    a = sub.add_parser("studio"); a.add_argument("--world", required=True); a.add_argument("--artist", required=True)
+    a.add_argument("--host", default="127.0.0.1"); a.add_argument("--port", type=int, default=8100)
+    a = sub.add_parser("v13"); a.add_argument("--limit", type=int); a.add_argument("--yes", action="store_true"); a.add_argument("--out", default=str(OUT))
     a = ap.parse_args(argv)
+    if a.cmd == "studio":
+        from worldengine import world as WD
+        from worldengine.studio import server
+        server.serve(WD.load(a.world), a.artist, a.host, a.port)
+        return 0
+    if a.cmd == "v13":
+        return _v13(a)
     if a.cmd == "conform":
         return _conform(a)
     if a.cmd == "generate":
@@ -160,6 +172,32 @@ def _world(a) -> int:
 
 
 REFERENCE = ("ref_yeobaek", "ref_festival_baroque", "ref_modulor")
+
+
+def _v13(a) -> int:
+    from worldengine.studio import config, server, v13
+    data = v13.load()
+    items = data["items"][: a.limit] if a.limit else data["items"]
+    b = v13.bound(len(items))
+    print("세트:", data["label"])
+    print("모델 %s · 항목 %d · 요청 상한 %d · 출력 토큰 상한 %d (WE_MAX_TURNS=%d, WE_MAX_TOKENS=%d). 입력 토큰은 실행 후 실측해 보고한다."
+          % (config.model(), b["items"], b["max_requests"], b["max_output_tokens"], config.MAX_TURNS, config.MAX_TOKENS))
+    if not a.yes:
+        print("비용이 드는 실행이다. 위 상한을 확인했으면 --yes 를 붙여 다시 실행한다."); return 2
+    client, why = server.make_client()
+    if client is None:
+        print("실행 못 함:", why); return 2
+    rows = v13.run(items, lambda: client)
+    ok = sum(r["ok"] for r in rows)
+    tin = sum(r["usage"]["input_tokens"] for r in rows); tout = sum(r["usage"]["output_tokens"] for r in rows)
+    out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    rep = out / "v13_run.json"
+    rep.write_text(json.dumps({"label": data["label"], "model": config.model(), "rows": rows, "input_tokens": tin, "output_tokens": tout}, ensure_ascii=False, indent=1), encoding="utf-8")
+    print("산출물:", rep); print("=== 보고 ===")
+    for r in rows:
+        print("%s %s %s %s" % ("맞음" if r["ok"] else "틀림", r["id"], r["tools"], "; ".join(r["why"])))
+    print("범위 안 해석 %d/%d (개발자 작성 시드 세트 기준) · 실제 토큰 입력 %d / 출력 %d" % (ok, len(rows), tin, tout))
+    return 0
 
 
 def _conform(a) -> int:
