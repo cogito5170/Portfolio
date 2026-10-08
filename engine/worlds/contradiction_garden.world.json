@@ -1,0 +1,51 @@
+{
+ "format": "world/1",
+ "name": "모순의 정원 — 중세 아치와 크롬 행성 (데모)",
+ "about": "Runtime demo, not an artist's work. Juxtaposition (SPEC 모순 합성): a medieval arcade and a metallic future share one courtyard; the low arch is sized for a child's eye (1.1 m), the tall one for an adult's (1.7 m).",
+ "bounds": [24, 24, 8],
+ "environment": {"background": "#e9edf2", "exposure": 0.9, "ambient": 0.7, "sun": {"dir": [-0.35, -0.45, 0.8], "intensity": 2.4}},
+ "materials": {
+  "lawn": {"color": "#ffffff", "roughness": 1, "texture": {"kind": "speckle", "colors": ["#7fa36b", "#6d9159", "#8fb57a", "#5f804e"], "size_m": 3}},
+  "stone": {"color": "#c9bda8", "roughness": 0.92},
+  "stone_dark": {"color": "#8f8574", "roughness": 0.95},
+  "chrome": {"color": "#e6e9ee", "roughness": 0.08, "metalness": 1},
+  "gold": {"color": "#e8c46a", "roughness": 0.2, "metalness": 1},
+  "neon": {"color": "#111111", "emissive": "#41e0ff", "emissive_intensity": 3},
+  "grid": {"color": "#ffffff", "roughness": 0.4, "metalness": 0.3, "texture": {"kind": "grid", "colors": ["#1b1f27", "#5ad1ff"], "size_m": 2}},
+  "glass": {"kind": "physical", "color": "#cfe8f2", "roughness": 0.03, "transmission": 0.95, "opacity": 0.4, "ior": 1.5}
+ },
+ "entities": [
+  {"id": "lawn", "type": "plane", "pos": [12, 12, 0], "size": [24, 24], "material": "lawn"},
+  {"id": "plaza", "type": "plane", "pos": [16.5, 12, 0.01], "size": [11, 11], "material": "grid"},
+  {"id": "arcade", "type": "group", "pos": [5, 12, 0], "children": [
+   {"id": "arch_adult", "type": "arch", "pos": [0, -4, 0], "width": 2.2, "height": 2.6, "depth": 0.7, "thickness": 0.55, "material": "stone", "solid": false},
+   {"id": "arch_mid", "type": "arch", "pos": [0, 0, 0], "width": 1.8, "height": 2.0, "depth": 0.7, "thickness": 0.55, "material": "stone"},
+   {"id": "arch_child", "type": "arch", "pos": [0, 4, 0], "width": 1.0, "height": 1.0, "depth": 0.7, "thickness": 0.45, "material": "stone_dark"},
+   {"id": "tower", "type": "cylinder", "pos": [-2.5, 7, 0], "radius": 1.3, "height": 6.5, "material": "stone", "solid": true,
+    "children": [{"id": "tower_roof", "type": "cone", "pos": [0, 0, 6.5], "radius": 1.6, "height": 2.2, "material": "stone_dark"}]}
+  ]},
+  {"id": "planet", "type": "sphere", "pos": [16.5, 12, 0.6], "radius": 1.8, "material": "chrome", "solid": true,
+   "behaviors": [{"type": "spin", "axis": "z", "deg_per_s": 12}]},
+  {"id": "plinth", "type": "cylinder", "pos": [16.5, 12, 0], "radius": 1.2, "height": 0.6, "material": "grid", "solid": true},
+  {"id": "halo", "type": "torus", "pos": [16.5, 12, 2.2], "radius": 3.0, "tube": 0.06, "material": "neon",
+   "behaviors": [{"type": "spin", "axis": "z", "deg_per_s": -20}, {"type": "bob", "amp": 0.15, "hz": 0.2}]},
+  {"id": "moon", "type": "sphere", "pos": [19.5, 12, 2.6], "radius": 0.35, "material": "gold",
+   "behaviors": [{"type": "orbit", "center": [16.5, 12], "radius": 3.6, "period_s": 14}]},
+  {"id": "pillar_a", "type": "box", "pos": [12.5, 7.5, 0], "size": [0.6, 0.6, 3.2], "radius": 0.05, "material": "chrome", "solid": true},
+  {"id": "pillar_b", "type": "box", "pos": [12.5, 16.5, 0], "size": [0.6, 0.6, 3.2], "radius": 0.05, "material": "chrome", "solid": true},
+  {"id": "vitrine", "type": "box", "pos": [20.5, 6, 0], "size": [1.6, 1.6, 2.2], "material": "glass", "solid": true,
+   "children": [{"id": "relic", "type": "torus", "pos": [0, 0, 0.9], "rot": [90, 0, 0], "radius": 0.35, "tube": 0.08, "material": "gold",
+    "behaviors": [{"type": "spin", "axis": "y", "deg_per_s": 40}]}]},
+  {"id": "sign", "type": "text", "pos": [16.5, 5.2, 2.6], "size": [5.0, 0.7], "text": "아이와 어른, 중세와 미래", "background": "#1b1f27", "color": "#41e0ff"},
+  {"id": "visitor_child", "type": "person", "pos": [8.2, 15.5, 0], "height": 1.2, "color": "#ffb74d", "rot": [0, 0, 200]},
+  {"id": "visitor_adult", "type": "person", "pos": [9.0, 8.5, 0], "height": 1.75, "color": "#7986cb", "rot": [0, 0, 160]},
+  {"id": "lamp", "type": "light", "pos": [16.5, 12, 5.5], "kind": "point", "color": "#9fe8ff", "intensity": 25, "distance": 14}
+ ],
+ "views": {
+  "aerial": {"pos": [-3, -9, 13], "target": [12.5, 12, 0.5], "fov": 45},
+  "eye": {"pos": [10.5, 0.8, 1.7], "target": [15, 12, 1.5], "fov": 60},
+  "child": {"pos": [10.5, 16, 1.1], "target": [5, 16, 1.0], "fov": 65}
+ },
+ "player": {"spawn": [10.5, 1.5], "yaw_deg": 75, "eye": "adult", "eye_heights": {"child": 1.1, "adult": 1.7}, "speed": 1.4},
+ "controls": {"default": "orbit"}
+}

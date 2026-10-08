@@ -1,0 +1,90 @@
+// World format "world/1" -- the one JSON the runtime reads. Pure module (no DOM, no three) so node can test it.
+//
+// Coordinates: metres, z up, x east, y north. The renderer converts once (engine.js root group).
+//
+// {
+//   "format": "world/1", "name": str,
+//   "bounds": [W, D, H]?,                       // extent; derived from entities when absent
+//   "environment": {"background", "ambient", "sun": {"dir", "intensity", "color", "shadows"}, "env_map": "room"|null,
+//                   "exposure", "fog": {"density", "color"}|null},
+//   "materials": {name: {kind, color, roughness, metalness, emissive, emissive_intensity, opacity, transmission, texture}},
+//   "entities": [{"id", "type", "pos": [x,y,z], "rot": [rx,ry,rz] (deg), "scale": s|[sx,sy,sz],
+//                 "material": name|{...}, "behaviors": [{"type", ...}], "solid": bool, "children": [...], <type fields>}],
+//   "views": {name: {"pos": [x,y,z], "target": [x,y,z], "fov": deg}},
+//   "player": {"spawn": [x,y], "yaw_deg", "eye": "adult"|"child", "eye_heights": {"child": 1.1, "adult": 1.7}, "speed"},
+//   "controls": {"default": "orbit"|"walk"}
+// }
+//
+// Unknown fields are kept and ignored (open data): a newer plugin may read them.
+// check() says what is wrong; it never fixes the world.
+
+export const FORMAT = 'world/1';
+export const EYE_HEIGHTS = { child: 1.1, adult: 1.7 };
+
+const isNum = v => typeof v === 'number' && Number.isFinite(v);
+const isVec = (v, n) => Array.isArray(v) && v.length === n && v.every(isNum);
+
+export function check(w, knownTypes = null) {
+  const bad = [];
+  if (!w || typeof w !== 'object' || Array.isArray(w)) return ['world must be an object'];
+  if (w.format !== FORMAT) bad.push(`format must be "${FORMAT}": ${JSON.stringify(w.format ?? null)}`);
+  if (typeof w.name !== 'string' || !w.name) bad.push('name must be a non-empty string');
+  if (w.bounds !== undefined && !(isVec(w.bounds, 3) && w.bounds.every(v => v > 0))) bad.push(`bounds must be three positive numbers: ${JSON.stringify(w.bounds)}`);
+  if (!Array.isArray(w.entities)) bad.push('entities must be a list');
+  const ids = new Set();
+  const walk = (list, path) => (list || []).forEach((e, i) => {
+    const p = `${path}[${i}]`;
+    if (!e || typeof e !== 'object') { bad.push(`${p} must be an object`); return; }
+    if (typeof e.type !== 'string') bad.push(`${p}.type must be a string`);
+    else if (knownTypes && !knownTypes.has(e.type)) bad.push(`${p}.type unknown: "${e.type}"`);
+    if (e.id !== undefined) { if (ids.has(e.id)) bad.push(`${p}.id duplicated: "${e.id}"`); ids.add(e.id); }
+    if (e.pos !== undefined && !isVec(e.pos, 3)) bad.push(`${p}.pos must be [x,y,z]`);
+    if (e.rot !== undefined && !isVec(e.rot, 3)) bad.push(`${p}.rot must be [rx,ry,rz] degrees`);
+    if (e.scale !== undefined && !(isNum(e.scale) || isVec(e.scale, 3))) bad.push(`${p}.scale must be a number or [sx,sy,sz]`);
+    if (typeof e.material === 'string' && !(w.materials && e.material in w.materials) && !e.material.includes('.'))
+      bad.push(`${p}.material "${e.material}" is not in materials`);
+    if (e.children !== undefined) { if (!Array.isArray(e.children)) bad.push(`${p}.children must be a list`); else walk(e.children, p + '.children'); }
+  });
+  if (Array.isArray(w.entities)) walk(w.entities, 'entities');
+  for (const [k, v] of Object.entries(w.views || {}))
+    if (!(v && isVec(v.pos, 3) && isVec(v.target, 3) && isNum(v.fov) && v.fov > 0 && v.fov < 180)) bad.push(`views.${k} needs pos, target, fov (0..180)`);
+  const pl = w.player;
+  if (pl !== undefined) {
+    if (pl.spawn !== undefined && !isVec(pl.spawn, 2)) bad.push('player.spawn must be [x,y]');
+    if (pl.eye !== undefined && !(pl.eye in { ...EYE_HEIGHTS, ...(pl.eye_heights || {}) })) bad.push(`player.eye unknown: "${pl.eye}"`);
+  }
+  const mode = w.controls && w.controls.default;
+  if (mode !== undefined && !['orbit', 'walk'].includes(mode)) bad.push(`controls.default must be orbit|walk: "${mode}"`);
+  return bad;
+}
+
+// Extent of everything with a position (used when bounds is absent). Rough on purpose: for camera framing only.
+export function extent(w) {
+  if (w.bounds) return { min: [0, 0, 0], max: w.bounds.slice() };
+  const min = [Infinity, Infinity, 0], max = [-Infinity, -Infinity, 1];
+  const visit = (list, off) => (list || []).forEach(e => {
+    const p = (e.pos || [0, 0, 0]).map((v, k) => v + off[k]);
+    const r = Math.max(e.size ? Math.max(...[].concat(e.size)) / 2 : 0, e.radius || 0, 0.5);
+    for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], p[k] - r); max[k] = Math.max(max[k], p[k] + r); }
+    visit(e.children, p);
+  });
+  visit(w.entities, [0, 0, 0]);
+  if (!Number.isFinite(min[0])) return { min: [0, 0, 0], max: [10, 10, 3] };
+  return { min, max };
+}
+
+export function eyeHeight(w, which) {
+  const pl = w.player || {};
+  const table = { ...EYE_HEIGHTS, ...(pl.eye_heights || {}) };
+  return table[which || pl.eye || 'adult'];
+}
+
+// Default views when the world has none: aerial (three-quarter, from the south-west) and eye (adult, from the south edge).
+export function defaultViews(w) {
+  const { min, max } = extent(w);
+  const c = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, 0], big = Math.max(max[0] - min[0], max[1] - min[1], 4);
+  return {
+    aerial: { pos: [c[0] - 0.55 * big, c[1] - 0.85 * big, 0.75 * big], target: c, fov: 45 },
+    eye: { pos: [c[0], min[1] + 0.5, eyeHeight(w)], target: [c[0], max[1], eyeHeight(w) * 0.8], fov: 60 },
+  };
+}
