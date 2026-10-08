@@ -5,7 +5,8 @@
     r = run(code, lang="python"|"node", inputs={...})   -> {"ran", "exit", "stdout", "stderr", "result", "killed", "reason"}
 
 Isolation (Linux):
-  - runs as user `nobody` (so RLIMIT_NPROC is enforced -- root would ignore it: fork bombs stop)
+  - runs as a dedicated unused uid (SANDBOX_UID) so RLIMIT_NPROC is enforced -- root would ignore it -- and the
+    process quota belongs to the sandbox alone: fork bombs stop
   - new user + network + mount + PID namespaces (`unshare -rmnpf --kill-child`): no network interfaces, and
     every process the code starts dies with it (no leftover children eating the process quota)
   - every mount remounted read-only; a fresh 64 MB tmpfs on /tmp is the only writable place (cwd /tmp/w)
@@ -24,8 +25,11 @@ import resource
 import shutil
 import signal
 import subprocess
+from pathlib import Path
 
-NOBODY = 65534
+# A uid no other process uses, so RLIMIT_NPROC (counted per uid) is the sandbox's own quota. `nobody` was not
+# enough: on CI runners other services already run as nobody and the quota was gone before the code started.
+SANDBOX_UID = int(os.environ.get("WE_SANDBOX_UID") or 61333)
 LIMITS = {"cpu_s": 5, "mem_mb": 512, "nproc": 32, "fsize_mb": 16, "wall_s": 15, "out_kb": 256}
 
 _LAUNCH = r"""set -e
@@ -55,12 +59,22 @@ def _drop(lim, address_mb=None):
         resource.setrlimit(resource.RLIMIT_AS, (a * mb, a * mb))
         resource.setrlimit(resource.RLIMIT_FSIZE, (lim["fsize_mb"] * mb, lim["fsize_mb"] * mb))
         if os.getuid() == 0:
-            os.setgroups([]); os.setgid(NOBODY); os.setuid(NOBODY)
+            os.setgroups([]); os.setgid(SANDBOX_UID); os.setuid(SANDBOX_UID)
         resource.setrlimit(resource.RLIMIT_NPROC, (lim["nproc"], lim["nproc"]))
     return pre
 
 
 _CACHE = {}
+
+
+def _uid_of(proc_dir) -> "int | None":
+    try:
+        for line in (proc_dir / "status").read_text().splitlines():
+            if line.startswith("Uid:"):
+                return int(line.split()[1])
+    except OSError:
+        return None
+    return None
 
 
 def available() -> "tuple[bool, str]":
@@ -70,6 +84,10 @@ def available() -> "tuple[bool, str]":
     unshare, py, _ = _tools()
     if os.name != "posix" or not unshare or not py:
         _CACHE["a"] = (False, "unshare 또는 python3 가 없다 (Linux 전용)")
+        return _CACHE["a"]
+    busy = [d.name for d in Path("/proc").iterdir() if d.name.isdigit() and _uid_of(d) == SANDBOX_UID]
+    if busy:
+        _CACHE["a"] = (False, "샌드박스 uid %d 를 다른 프로세스가 쓰고 있다 (%d개) — WE_SANDBOX_UID 로 바꿀 것" % (SANDBOX_UID, len(busy)))
         return _CACHE["a"]
     try:
         r = subprocess.run([unshare, "-rmn", "sh", "-c", "mount -t tmpfs t /tmp && ! ip link show 2>/dev/null | grep -q 'state UP'"],

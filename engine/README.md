@@ -171,7 +171,7 @@ python3 -m worldengine studio --world worlds/ref_yeobaek.world.json --artist 작
 | 요구 | 어떻게 |
 |---|---|
 | N-02 열린 데이터 | 모르는 필드가 검사·스튜디오 제안/적용/되돌리기·사이트 공개·결합을 거쳐도 그대로 남는다 (시험) |
-| N-03 샌드박스 | `worldengine/sandbox.py` — `nobody` 사용자로, 새 사용자·네트워크·마운트·PID 네임스페이스(`unshare -rmnpf --kill-child`): 네트워크 장치 없음, 모든 마운트 읽기 전용, 쓰기는 64 MB tmpfs 한 곳, 환경 변수 비움, CPU·메모리·프로세스 수·파일 크기·시간 제한, node 는 `--permission` 추가. **격리를 못 만들면 실행하지 않는다** (`python3 -m worldengine sandbox-probe`) |
+| N-03 샌드박스 | `worldengine/sandbox.py` — 다른 프로세스가 쓰지 않는 전용 uid 로 (프로세스 수 한도가 샌드박스 몫이 되게), 새 사용자·네트워크·마운트·PID 네임스페이스(`unshare -rmnpf --kill-child`): 네트워크 장치 없음, 모든 마운트 읽기 전용, 쓰기는 64 MB tmpfs 한 곳, 환경 변수 비움, CPU·메모리·프로세스 수·파일 크기·시간 제한, node 는 `--permission` 추가. **격리를 못 만들면 실행하지 않는다** (`python3 -m worldengine sandbox-probe`) |
 | N-04 승격 | 샌드박스 코드 → 적합성 키트(G-05, 샌드박스 안에서) → 작가 승인(A-06) → 작가의 비공개 플러그인 폴더. **승격된 플러그인도 매번 샌드박스에서 돈다** |
 | N-05 기록부 | `cannot_do` 마다 경로·종류(고정 범주)·이유·대안을 작가 데이터 폴더에 남긴다. 내보내기는 동의 없으면 경로·범주·대안 수·날짜만 (작가의 말·이유 문장 없음) |
 | CT-01~03 | `propose_interpretations`: 개념(출처 포함) → 해석 2~3개, 각각 근거와 실행 규칙(축·움직일 몸·행동) → 시안 보드. 해석은 개념 카드에 남는다 |
