@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 
+from worldengine import interpret as IN
 from worldengine.studio import config, tools as T
 
 SYSTEM = """너는 World Platform 스튜디오의 조수다. 상대는 코딩을 하지 않는 작가이고, 한국어로 말하거나 이미지를 보여 준다.
@@ -21,7 +22,9 @@ SYSTEM = """너는 World Platform 스튜디오의 조수다. 상대는 코딩을
 5. 고해상도 렌더, 작품 삭제, 외부 공개, 실제 장치 구동은 request_action 으로만 요청한다. 직접 실행하지 않는다.
 6. 할 수 없는 요청은 cannot_do 로 말하고 대안을 준다. 비슷한 다른 것으로 바꿔치기하지 않는다.
 7. 작가의 미적 판단을 평균적인 취향으로 끌고 가지 않는다. 작가의 단어를 그대로 존중한다.
-8. 답은 짧은 한국어로."""
+8. 개념을 규칙으로 옮겨 달라는 요청에는 propose_interpretations 로 해석 카드 2~3개를 낸다. 두 세계를 합치는 요청에는 propose_combination 을 쓰고 평균 내지 않는다.
+9. 기존 도구로 안 되면 run_code 로 샌드박스에서 시험하고, 쓸 만하면 propose_plugin 으로 등록을 제안한다 (작가 승인 필요). 그래도 안 되면 cannot_do.
+10. 답은 짧은 한국어로."""
 
 
 def _get(b, k, d=None):
@@ -43,7 +46,9 @@ class Agent:
         content = [{"type": "image", "source": {"type": "base64", "media_type": mt, "data": data}} for mt, data in images]
         content.append({"type": "text", "text": text})
         self.messages.append({"role": "user", "content": content})
-        out = {"reply": "", "tool_calls": [], "proposals": [], "approvals": [], "refusals": [], "variant_sets": [], "stop_reason": None}
+        out = {"reply": "", "tool_calls": [], "proposals": [], "approvals": [], "refusals": [], "variant_sets": [], "stop_reason": None,
+               "warnings": [w for w in [IN.copy_risk(text)] if w]}          # CT-04: shown to the artist, never blocks
+        self.session.last_request = text
         for _ in range(config.MAX_TURNS):
             r = self.client.messages.create(model=self.model, max_tokens=config.MAX_TOKENS, system=self.system(),
                                             tools=T.TOOLS, thinking={"type": "adaptive"}, messages=self.messages)

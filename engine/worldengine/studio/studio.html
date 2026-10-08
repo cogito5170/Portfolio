@@ -83,6 +83,7 @@ document.getElementById('f').onsubmit = async (e) => {
   const r = await api('message', body);
   if (r.error) { err.textContent = r.error; return; }
   if (r.reply) bubble('ai', r.reply);
+  for (const w of r.warnings || []) { const c = el('div', 'card warn'); c.appendChild(el('h4', '', '확인해 주세요 (막지 않아요)')); c.appendChild(el('div', '', w.message)); log.appendChild(c); }
   for (const x of r.refusals || []) { const c = el('div', 'card warn'); c.appendChild(el('h4', '', '지금은 못 해요')); c.appendChild(el('div', '', x.reason)); const ul = el('ul'); for (const a of x.alternatives) ul.appendChild(el('li', '', a)); c.appendChild(ul); log.appendChild(c); }
   refresh();
 };

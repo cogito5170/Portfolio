@@ -145,6 +145,13 @@ class ApprovalTests(NoNetwork):
         self.assertFalse((self.tmp / "data" / "out").exists())
         self.assertEqual({a["status"] for a in st.session.approvals.values()}, {"waiting"})
 
+    def test_publish_ships_exactly_the_artists_work(self):
+        s = SS.Session(YEOBAEK, SV.executors(self.tmp / "out"))
+        r = s.approve(s.request("publish", {}, "w")["approval"])
+        listed = json.loads((Path(r["built"]) / "site.json").read_text(encoding="utf-8"))["worlds"]
+        self.assertEqual([w["file"] for w in listed], ["work.world.json"])
+        self.assertFalse(r["deployed"])
+
     def test_drive_device_has_no_executor(self):
         s = SS.Session(YEOBAEK, SV.executors(self.tmp / "out"))
         aid = s.request("drive_device", {}, "w")["approval"]

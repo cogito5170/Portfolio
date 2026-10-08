@@ -46,7 +46,7 @@ def executors(out_dir: Path) -> dict:
         tmp_worlds = out_dir / "publish_src"
         tmp_worlds.mkdir(parents=True, exist_ok=True)
         (tmp_worlds / "work.world.json").write_text(json.dumps(s.world, ensure_ascii=False), encoding="utf-8")
-        r = site.build(dest, worlds=[tmp_worlds / "work.world.json"])
+        r = site.build(dest, world_files=[tmp_worlds / "work.world.json"])
         return {"built": r["out"], "deployed": False, "reason": "폴더만 만들었다. 인터넷 배포는 저장소 주인의 Pages 스위치가 필요하다"}
 
     def delete_work(s, args):
@@ -54,13 +54,19 @@ def executors(out_dir: Path) -> dict:
         s.proposals.clear()
         return {"deleted": True, "kept": "처음 판만 남겼다"}
 
-    return {"render_highres": render_highres, "publish": publish, "delete_work": delete_work}
+    def promote_plugin(s, args):
+        from worldengine import promote
+        return promote.install(args["code"], args["name"], "1", args["rows"], out_dir.parent)
+
+    return {"render_highres": render_highres, "publish": publish, "delete_work": delete_work, "promote_plugin": promote_plugin}
 
 
 class Studio:
     def __init__(self, world: dict, artist: str, client=None, data=None):
         self.data = Path(data or config.data_dir())
-        self.session = SS.Session(world, executors(self.data / "out"))
+        from worldengine import ledger as LG
+        self.ledger = LG.Ledger(artist, self.data)
+        self.session = SS.Session(world, executors(self.data / "out"), self.ledger)
         self.vocab = VC.Vocab(artist, self.data)
         self.client = client
         self.agent = AG.Agent(client, self.session, self.vocab) if client is not None else None

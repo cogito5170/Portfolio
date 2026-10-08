@@ -11,6 +11,9 @@
     generate <world.json> --plugin NAME [--out DIR]   one plugin, one world: artifact + recipe (G-01)
     studio --world W.json --artist NAME [--host 0.0.0.0] [--port 8100]   conversational studio (needs ANTHROPIC_API_KEY for the agent)
     exhibit --world W.json [--host 0.0.0.0] [--port 8200]   show a work to visitors; live character replies if a key is set
+    v12 [--yes]                          hidden request set (sealed file via WE_V12_FILE; only its hash is in the repo)
+    sandbox-probe                        can this machine isolate agent code? (prints the reason when not)
+    combine A.json B.json --bodies MODE [--out F]   contradiction synthesis + recognisability (K-06)
     v13 [--limit N] [--yes]              intent-evaluation run against the real model (costs money: prints the bound first)
     site [--out DIR] [--no-smoke]        static site (runtime + three.js + worlds + landing page); smoke-loads every world
     draw [--urdf U] [--svg F --scale S --center X,Y] [--views aerial,top] [--save-world]
@@ -89,7 +92,36 @@ def main(argv=None) -> int:
     a.add_argument("--host", default="127.0.0.1"); a.add_argument("--port", type=int, default=8100)
     a = sub.add_parser("v13"); a.add_argument("--limit", type=int); a.add_argument("--yes", action="store_true"); a.add_argument("--out", default=str(OUT))
     a = sub.add_parser("exhibit"); a.add_argument("--world", required=True); a.add_argument("--host", default="127.0.0.1"); a.add_argument("--port", type=int, default=8200)
+    a = sub.add_parser("v12"); a.add_argument("--yes", action="store_true")
+    a = sub.add_parser("sandbox-probe")
+    a = sub.add_parser("combine"); a.add_argument("a"); a.add_argument("b"); a.add_argument("--bodies", default="juxtapose", choices=["juxtapose", "layer", "seam", "viewpoint"]); a.add_argument("--out")
     a = ap.parse_args(argv)
+    if a.cmd == "sandbox-probe":
+        from worldengine import sandbox
+        ok, why = sandbox.available()
+        print(json.dumps({"sandbox_available": ok, "reason": why}, ensure_ascii=False))
+        return 0
+    if a.cmd == "combine":
+        from worldengine import combine as KB, world as WD
+        A, B = WD.load(a.a), WD.load(a.b)
+        C = KB.combine(A, B, {"bodies": a.bodies})
+        print(json.dumps(KB.recognisability(C, A, B), ensure_ascii=False))
+        if a.out:
+            print("산출물:", WD.save(C, a.out))
+        return 0
+    if a.cmd == "v12":
+        from worldengine import hidden
+        from worldengine.studio import server
+        st = hidden.load_sealed()
+        if st["status"] != "ok":
+            print("V-12: %s — %s (숫자 없음)" % (st["status"], st["detail"])); return 2
+        if not a.yes:
+            print("봉인 세트 %d개 확인. 비용이 드는 실행이다: --yes 로 실행한다." % len(st["items"])); return 2
+        client, why = server.make_client()
+        if client is None:
+            print("실행 못 함:", why); return 2
+        print(json.dumps(hidden.run(lambda: client), ensure_ascii=False, indent=1))
+        return 0
     if a.cmd == "exhibit":
         from worldengine import exhibit, world as WD
         exhibit.serve(WD.load(a.world), a.host, a.port)
@@ -202,7 +234,7 @@ def _v13(a) -> int:
     print("산출물:", rep); print("=== 보고 ===")
     for r in rows:
         print("%s %s %s %s" % ("맞음" if r["ok"] else "틀림", r["id"], r["tools"], "; ".join(r["why"])))
-    print("범위 안 해석 %d/%d (개발자 작성 시드 세트 기준) · 실제 토큰 입력 %d / 출력 %d" % (ok, len(rows), tin, tout))
+    print("범위 안 해석 %d/%d (개발자 작성 시드 세트 기준) · 바꿔치기(V-15) %d · 실제 토큰 입력 %d / 출력 %d" % (ok, len(rows), sum(r["substituted"] for r in rows), tin, tout))
     return 0
 
 

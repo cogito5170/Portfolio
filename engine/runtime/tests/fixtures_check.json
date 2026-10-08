@@ -578,5 +578,22 @@
     "id": "t"
    }
   }
+ },
+ {
+  "name": "eye_only",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [
+    {
+     "type": "box",
+     "eye_only": "child"
+    },
+    {
+     "type": "box",
+     "eye_only": "giant"
+    }
+   ]
+  }
  }
 ]
