@@ -44,4 +44,15 @@ export const selftests = {
     eng.walk.keys.add('KeyW'); run(eng, 240); eng.walk.keys.delete('KeyW');
     return { x: eng.walk.state.x, start_x: c[0] - 2, wall_x0: c[0], radius: 0.25 };
   },
+  // Drawing robot: the ink this runtime draws (its own FK) vs the planner's intended targets, at every pen-down sample.
+  async robot(eng) {
+    let arm = null; eng.root.traverse(o => { if (o.userData.robot && !arm) arm = o; });
+    if (!arm) return { error: 'no robot.arm' };
+    const tr = arm.userData.entity.trajectory, st = arm.userData.robot;
+    let worst = 0, n = 0, pairs = 0;
+    tr.pen.forEach((p, i) => { if (!p) return; n++; const a = st.tips[i], b = tr.target[i]; worst = Math.max(worst, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])); });
+    for (let i = 1; i < tr.pen.length; i++) if (tr.pen[i] && tr.pen[i - 1]) pairs++;
+    eng.step(tr.t.at(-1) / 2, false);
+    return { pen_samples: n, ink_err_max_m: worst, ink_segments: st.inkSegments, pen_pairs: pairs, mid_time: st.time, mid_index: st.i };
+  },
 };

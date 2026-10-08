@@ -7,6 +7,8 @@
     world <file.world.json|example:NAME> [--views aerial,eye] [--mode orbit|walk] [--eye adult|child]
                                          render a world through the modular runtime (engine/runtime)
     serve [--port 8000] [--host 0.0.0.0] serve engine/ so a phone or PC on the same network can open the runtime
+    draw [--urdf U] [--svg F --scale S --center X,Y] [--views aerial,top] [--save-world]
+                                         drawing robot: plan, verify (V-16), write a world, render it mid-drawing and done
 
 Common: --out DIR (default engine/build), --w/--h (PNG size), --no-browser (skip headless rendering).
 Prints "산출물: <path>" lines and a "=== 보고 ===" summary that names the backend of every image.
@@ -68,7 +70,14 @@ def main(argv=None) -> int:
     a.add_argument("--mode", default="orbit", choices=["orbit", "walk"]); a.add_argument("--eye")
     a.add_argument("--out", default=str(OUT)); a.add_argument("--w", type=int, default=1280); a.add_argument("--h", type=int, default=800)
     a = sub.add_parser("serve"); a.add_argument("--port", type=int, default=8000); a.add_argument("--host", default="0.0.0.0")
+    a = sub.add_parser("draw"); a.add_argument("--urdf", default=str(ENGINE.parent / "kinematics" / "planar_3_dof.urdf"))
+    a.add_argument("--svg"); a.add_argument("--scale", type=float, default=0.001, help="m per SVG unit")
+    a.add_argument("--center", default="1.9,0"); a.add_argument("--views", default="aerial,top")
+    a.add_argument("--out", default=str(OUT)); a.add_argument("--w", type=int, default=1280); a.add_argument("--h", type=int, default=800)
+    a.add_argument("--save-world", action="store_true", help="also write worlds/drawing_robot.world.json")
     a = ap.parse_args(argv)
+    if a.cmd == "draw":
+        return _draw(a)
     if a.cmd == "world":
         return _world(a)
     if a.cmd == "serve":
@@ -114,6 +123,40 @@ def _world(a) -> int:
     print("=== 보고 ===")
     print("%s — 런타임 렌더 · 모드 %s · 백엔드: %s" % (w["name"], a.mode, ", ".join(sorted(backends))))
     return 0
+
+
+def _draw(a) -> int:
+    from worldengine import draw as D, headless, robot as RB, world as WD
+    ch = RB.load_chain(a.urdf)
+    c = [float(x) for x in a.center.split(",")]
+    if a.svg:
+        raw = D.svg_path(" ".join(__import__("re").findall(r'\sd="([^"]+)"', Path(a.svg).read_text(encoding="utf-8"))))
+        xs = [p[0] for s in raw for p in s]; ys = [p[1] for s in raw for p in s]
+        mx, my = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+        strokes = [[[c[0] + (x - mx) * a.scale, c[1] - (y - my) * a.scale] for x, y in s] for s in raw]   # SVG y is down
+    else:
+        strokes = D.demo_strokes(tuple(c))
+    q0, err = D.home(ch, [c[0], c[1], 0.0], [-0.6, 0.7, 0.6][:len(RB.active(ch))] + [0.0] * max(0, len(RB.active(ch)) - 3))
+    p = D.plan(ch, strokes, {"origin": [0, 0, 0], "u": [1, 0, 0], "v": [0, 1, 0]}, q_home=q0)
+    out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    stem = "draw_" + (Path(a.svg).stem if a.svg else "demo")
+    w = D.world(p)
+    bad = WD.check(w)
+    if bad:
+        print("세계 파일 오류:", bad); return 2
+    md = out / (stem + "_V16.md"); md.write_text(D.report_md(p, stem), encoding="utf-8")
+    print("산출물:", WD.save(w, out / (stem + ".world.json"))); print("산출물:", md)
+    if a.save_world:
+        print("산출물:", WD.save(w, ENGINE / "worlds" / "drawing_robot.world.json"))
+    dur = p["verify"]["duration_s"]
+    for v in [x for x in a.views.split(",") if x]:
+        for frac in (0.5, 1.0):
+            png = out / ("%s_%s_%02d.png" % (stem, v, int(frac * 100)))
+            r = headless.render_world(w, png, view=v, w=a.w, h=a.h, t=dur * frac)
+            print(("산출물: %s" % png) if r["ok"] else "**그림 없음** %s: %s" % (v, r["reason"]))
+    print("=== 보고 ===")
+    print(md.read_text(encoding="utf-8"))
+    return 0 if p["verify"]["pass"] else 1
 
 
 def _serve(a) -> int:

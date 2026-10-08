@@ -32,6 +32,9 @@ export function hud(eng) {
     bAdult.textContent = `어른 ${eng.world.player?.eye_heights?.adult ?? 1.7} m`; bChild.textContent = `아이 ${eng.world.player?.eye_heights?.child ?? 1.1} m`;
     sel.value = eng.viewName; sel.hidden = eng.mode === 'walk';
     top.innerHTML = `<b></b><div class="we-help"></div>`; top.firstChild.textContent = eng.world.name; top.lastChild.textContent = help();
+    const v = eng.world.verify && eng.world.verify['V-16'];     // a drawing robot world carries its own verification
+    if (v) { const d = document.createElement('div'); d.className = 'we-help';
+      d.textContent = `V-16 ${v.pass ? '통과' : '실패'} · 획 오차 최대 ${(v.stroke_err_max_m * 1e3).toFixed(3)} mm · 한계 위반 ${v.limit_violations} · 충돌 ${v.self_collisions}`; top.appendChild(d); }
   };
   for (const ev of ['mode', 'eye', 'view']) eng.on(ev, refresh);
   refresh();

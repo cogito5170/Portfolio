@@ -15,6 +15,9 @@ import { Joystick } from './controls/joystick.js';
 
 export const T3 = (x, y, z) => new THREE.Vector3(x, z, -y);            // world (z up) -> three (y up)
 export const FROM3 = v => [v.x, -v.z, v.y];
+// Authored fov is vertical on landscape screens; on portrait phones it is kept as the horizontal fov instead,
+// so a view framed on a PC still shows the whole subject on a phone (capped at 90 deg).
+export const fitFov = (fov, aspect) => aspect >= 1 ? fov : Math.min(90, 2 * Math.atan(Math.tan(fov * Math.PI / 360) / aspect) * 180 / Math.PI);
 
 export class Engine {
   constructor(container, { headless = false, width, height } = {}) {
@@ -37,7 +40,8 @@ export class Engine {
   emit(ev, x) { for (const f of this.listeners[ev] || []) f(x); }
 
   resize(w, h) {
-    this.size = [w, h]; this.renderer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
+    this.size = [w, h]; this.renderer.setSize(w, h); this.camera.aspect = w / h;
+    this.camera.fov = fitFov(this.mode === 'walk' ? 70 : (this.views?.[this.viewName]?.fov ?? 50), w / h); this.camera.updateProjectionMatrix();
   }
 
   async load(world, { view, mode, eye } = {}) {
@@ -91,7 +95,7 @@ export class Engine {
     if (e.scale !== undefined) o.scale.set(...(typeof e.scale === 'number' ? [e.scale, e.scale, e.scale] : e.scale));
     o.userData = { ...o.userData, id: e.id, type: e.type, entity: e, solid: !!e.solid,
       base: { pos: o.position.clone(), rot: o.rotation.clone() } };
-    if (e.behaviors && e.behaviors.length) this.animated.push(o);
+    if ((e.behaviors && e.behaviors.length) || o.userData.tick) this.animated.push(o);   // tick: a type that animates itself (robot)
     for (const ch of e.children || []) o.add(this._build(ch, ctx, abs));
     return o;
   }
@@ -111,7 +115,7 @@ export class Engine {
   setView(name) {
     const v = this.views[name]; if (!v) return;
     this.viewName = name; const c = this.camera;
-    c.fov = v.fov; c.near = v.near || Math.max(0.05, Math.max(...this.extent.max) / 2000); c.updateProjectionMatrix();
+    c.fov = fitFov(v.fov, this.size[0] / this.size[1]); c.near = v.near || Math.max(0.05, Math.max(...this.extent.max) / 2000); c.updateProjectionMatrix();
     c.position.copy(T3(...v.pos)); c.lookAt(T3(...v.target));
     if (this.orbit) { this.orbit.target.copy(T3(...v.target)); this.orbit.update(); }
     if (this.walk && this.mode === 'walk') this._placeWalker(v);
@@ -152,7 +156,7 @@ export class Engine {
     }
     this.mode = mode;
     this.orbit.enabled = mode === 'orbit'; this.walk.enabled = this.joystick.enabled = mode === 'walk';
-    if (mode === 'walk') { this._placeWalker(this.world.player && this.world.player.spawn ? null : this.views[this.viewName]); this.camera.fov = 70; this.camera.updateProjectionMatrix(); }
+    if (mode === 'walk') { this._placeWalker(this.world.player && this.world.player.spawn ? null : this.views[this.viewName]); this.camera.fov = fitFov(70, this.size[0] / this.size[1]); this.camera.updateProjectionMatrix(); }
     else this.setView(this.viewName);
     this.emit('mode', mode);
   }
@@ -160,7 +164,7 @@ export class Engine {
   _walkHeadless() {   // a still frame from the walker's eye (spawn or the current view), no input devices
     this.walk = { state: null, update() { return this.state; } };
     this._placeWalker(this.world.player && this.world.player.spawn ? null : this.views[this.viewName]);
-    this.camera.fov = 70; this.camera.updateProjectionMatrix(); this._applyWalk();
+    this.camera.fov = fitFov(70, this.size[0] / this.size[1]); this.camera.updateProjectionMatrix(); this._applyWalk();
   }
 
   _applyWalk() {
@@ -169,7 +173,10 @@ export class Engine {
 
   step(dt, render = true) {          // render=false: advance the simulation only (tests, catch-up)
     this.t += dt;
-    for (const o of this.animated) for (const b of o.userData.entity.behaviors) { const f = this.registry.behaviors.get(b.type); if (f) f(o, b, this.t, dt); }
+    for (const o of this.animated) {
+      if (o.userData.tick) o.userData.tick(this.t, dt);
+      for (const b of o.userData.entity.behaviors || []) { const f = this.registry.behaviors.get(b.type); if (f) f(o, b, this.t, dt); }
+    }
     if (this.mode === 'walk' && this.walk) { this.walk.update(dt); if (this.walk.state) this._applyWalk(); }
     else if (this.orbit && this.orbit.enabled) this.orbit.update();
     this.emit('step', dt);

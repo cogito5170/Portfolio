@@ -2,6 +2,7 @@
 import { Engine } from './engine.js';
 import { core } from './plugins/core.js';
 import { retail } from './plugins/retail.js';
+import { robot } from './plugins/robot.js';
 import { hud } from './ui/hud.js';
 import { selftests } from './selftest.js';
 
@@ -10,7 +11,7 @@ const say = s => console.log('WE_STATUS:' + s);
 try {
   const eng = new Engine(document.getElementById('app'), { headless: HEADLESS, width: +P.get('w') || undefined, height: +P.get('h') || undefined });
   eng.selftest = P.get('selftest');
-  eng.registry.use(core, eng.mats).use(retail, eng.mats);
+  eng.registry.use(core, eng.mats).use(retail, eng.mats).use(robot, eng.mats);
   const url = P.get('world') || '../worlds/contradiction_garden.world.json';
   const res = await fetch(url);
   if (!res.ok) throw new Error(`world ${url}: HTTP ${res.status}`);

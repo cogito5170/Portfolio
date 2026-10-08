@@ -15,6 +15,26 @@ World Platform의 **경험 런타임**(SPEC.md v0.4 §XR). 장면 JSON 하나 �
 런타임 코어 플러그인 `core`: box · cylinder · cone · sphere · capsule · torus · plane · ground · text · light · terrain · path · person · arch, 행동 spin · bob · orbit.
 `retail` 플러그인: 옛 매장 장면 전체를 `retail.store` 엔티티 하나로 그린다 (노란 강조색은 이 플러그인의 테마 — 세계가 `retail.accent` 로 덮어쓸 수 있다).
 
+`robot` 플러그인: `robot.arm` — URDF 사슬(JSON)과 관절 궤적을 재생하고, 펜이 내려간 곳에 잉크를 남긴다. 잉크 위치는 런타임 자신의 FK(`runtime/src/robot/kinematics.js`)로 계산한다.
+
+## 그림 그리는 로봇 (SPEC 6절 2단계 · V-16)
+
+```bash
+python3 -m worldengine draw                       # 데모(별·원·나선) → 계획 · V-16 보고 · 세계 · 렌더(그리는 중/끝)
+python3 -m worldengine draw --svg my.svg --scale 0.002   # M/L/H/V/Z 경로만. 곡선은 거부한다(조용히 펴지 않는다)
+```
+
+| 단계 | 어디 | 무엇 |
+|---|---|---|
+| 몸 | `kinematics/*.urdf` → `robot.load_chain` | 기준 구현(`kinematics/`, main 에 병합됨)의 URDF 파서를 그대로 쓴다 |
+| 역기구학 | `draw.ik` | 감쇠 최소제곱(DLS) + 휴식 자세 쪽 영공간 당김. 직전 자세에서 시작하므로 표본 사이 가지 뒤집힘이 없다 (기준 평면 IK는 점마다 첫 가지를 돌려준다) |
+| 궤적 | `draw.plan` | 획 재표본(2 cm) · 펜 들기는 도구 동작 · 시간 = 손끝 속도와 관절 속도 한계 중 느린 쪽 |
+| 검증 | `draw.verify` | 기준 FK 로 획 오차 · 표본 사이 관절 보간 중점 오차 · 도달 실패 · 기준 `check_trajectory` 한계 위반 · 이웃 아닌 링크 간격(자기 충돌) · 관절 속도 |
+| 재생 | `robot.arm` | JS FK 가 기준 test_vectors 600개와 1e-9 m 이내로 일치 (node 테스트) · 브라우저 안에서 잉크 ↔ 의도한 획 비교 (self-test) |
+
+데모 측정 (`worlds/drawing_robot.world.json`, planar_3_dof, 표본 862, 재생 54.7 s): 획 오차 최대 0.010 mm · 보간 중점 0.039 mm · 도달 실패 0 · 한계 위반 0 · 자기 충돌 0 (최소 링크 간격 0.99 m) · 관절 속도 최대 0.58 rad/s (한계 1.5, 기본값 — URDF velocity 는 기준 파서가 읽지 않는다). 브라우저 잉크 ↔ 의도한 획 최대 0.010 mm.
+일부러 한계를 넘는 그림(joint1 을 [−1.2, −0.9] rad 로 좁힘): 한계를 지키며 계획하면 도달 실패로, 한계를 무시하고 계획하면 기준 검사기가 위반 134건으로 잡는다 — 둘 다 FAIL. 6축 팔(arm_6_dof)도 같은 계획기로 사각형을 그려 통과.
+
 좌표: 미터, z 위, x 동, y 북. three.js 의 y-위로 바꾸는 곳은 `engine.js` 의 root 그룹 한 곳뿐.
 
 ## 출처
@@ -42,6 +62,7 @@ python3 -m worldengine layout my_layout.json --key F1 --no-browser
 python3 -m worldengine world worlds/contradiction_garden.world.json --views aerial,eye     # 런타임으로 렌더
 python3 -m worldengine world example:hongdae/F1 --mode walk --eye child                    # 옛 매장을 아이 눈높이로
 python3 -m worldengine serve            # 같은 와이파이의 휴대폰에서 열 주소를 찍어 준다
+#   …/runtime/index.html?world=../worlds/drawing_robot.world.json   ← 로봇이 그림을 그린다
 python3 -m unittest discover -s tests -v   # node 가 있으면 runtime/tests/*.test.mjs 도 함께 돈다
 ```
 
