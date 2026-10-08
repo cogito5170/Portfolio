@@ -60,5 +60,8 @@ def run(sc: dict, out_dir, stem: str, views=None, w: int = 1600, h: int = 1000, 
     r["backend"] = sorted({x["backend"] for x in r["views"].values()})
     if sc.get("boxes") and sc.get("shell"):
         from worldengine import layout
-        r["area"] = layout.area_program(sc)
+        try:
+            r["area"] = layout.area_program(sc)
+        except ImportError as e:                     # numpy is optional too
+            r["area_reason"] = _why(e)
     return r

@@ -1,0 +1,15 @@
+[
+ {"name": "minimal ok", "world": {"format": "world/1", "name": "w", "entities": []}},
+ {"name": "everything wrong", "world": {"format": "world/0", "name": "", "bounds": [1, -1, 2],
+   "entities": [{"type": "box", "id": "a", "pos": [0, 0]}, {"type": 3, "id": "a", "rot": [0, 0, "x"], "scale": [1, 2]},
+                {"type": "box", "material": "nope", "children": {}}],
+   "views": {"bad": {"pos": [0, 0, 0], "target": [1, 1, 1], "fov": 200}},
+   "player": {"spawn": [1, 2, 3], "eye": "giant"}, "controls": {"default": "fly"}}},
+ {"name": "unknown type with registry", "known": ["box"], "world": {"format": "world/1", "name": "w", "entities": [{"type": "box"}, {"type": "dragon"}]}},
+ {"name": "nested children and plugin material", "world": {"format": "world/1", "name": "w", "materials": {"m": {}},
+   "entities": [{"type": "group", "children": [{"type": "box", "material": "m"}, {"type": "box", "material": "retail.wood", "id": "x"},
+     {"type": "group", "children": [{"type": "box", "id": "x"}]}]}]}},
+ {"name": "custom eye height", "world": {"format": "world/1", "name": "w", "entities": [], "player": {"eye": "dog", "eye_heights": {"dog": 0.5}}}},
+ {"name": "not an object", "world": [1, 2]},
+ {"name": "unknown fields are fine", "world": {"format": "world/1", "name": "w", "entities": [{"type": "box", "glow": "maybe"}], "mood": "dusk"}}
+]

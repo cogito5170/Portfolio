@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
-"""html.py output -> PNG in headless Chromium. **Without a browser, say so. Do not pretend.**
+"""Pages -> PNG in headless Chromium. **Without a browser, say so. Do not pretend.**
 
     render(html_path, png_path, view="aerial", w=1600, h=1000) -> {"ok": bool, "backend": str, "reason": str}
+        a single-file page from html.py (legacy renderer)
+    render_world(world, png_path, view, w, h, mode="orbit"|"walk", eye=None, t=0, selftest=None) -> same (+ "result")
+        a world through the modular runtime (engine/runtime); selftest=<name> returns the page's measurements
 
 Two backends, tried in order:
 
@@ -15,9 +18,11 @@ rendering works offline and where the CDN is blocked.
 """
 from __future__ import annotations
 
+import base64
 import functools
 import glob
 import http.server
+import json
 import os
 import re
 import shutil
@@ -28,6 +33,7 @@ import threading
 from pathlib import Path
 
 VENDORED_THREE = Path(__file__).resolve().parent.parent / "vendor" / "three"
+RUNTIME = Path(__file__).resolve().parent.parent / "runtime"
 _STATUS_JS = """<script>(function poll(){
   if (window.__done === true) { console.log('WE_STATUS:done'); return; }
   if (window.__err !== null && window.__err !== undefined) { console.log('WE_STATUS:err:' + window.__err); return; }
@@ -94,24 +100,54 @@ def _stage(html_path) -> Path:
 
 
 def render(html_path, png_path, view: str = "aerial", w: int = 1600, h: int = 1000, timeout_s: float = 240.0) -> dict:
+    """A single-file page from html.py (legacy renderer)."""
     ok, why = available()
     if not ok:
         return {"ok": False, "backend": "없음", "reason": why}
     tmp = _stage(html_path)
     try:
-        handler = functools.partial(_Quiet, directory=str(tmp))
-        with socketserver.TCPServer(("127.0.0.1", 0), handler) as srv:
-            port = srv.server_address[1]
-            threading.Thread(target=srv.serve_forever, daemon=True).start()
-            url = "http://127.0.0.1:%d/index.html?view=%s&w=%d&h=%d&headless=1" % (port, view, w, h)
-            try:
-                if _has_playwright():
-                    return _render_playwright(url, png_path, w, h, timeout_s)
-                return _render_cli(url, png_path, w, h, timeout_s)
-            finally:
-                srv.shutdown()
+        return _shoot(tmp, "index.html?view=%s&w=%d&h=%d&headless=1" % (view, w, h), png_path, w, h, timeout_s)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def render_world(world, png_path, view: str = "aerial", w: int = 1280, h: int = 800, mode: str = "orbit",
+                 eye: "str | None" = None, t: float = 0.0, selftest: "str | None" = None, timeout_s: float = 240.0) -> dict:
+    """A world (dict or path to world JSON) through the modular runtime (engine/runtime). Same honesty rules.
+
+    With selftest=<name>, the page runs that in-browser test and its measurements come back as r["result"]."""
+    ok, why = available()
+    if not ok:
+        return {"ok": False, "backend": "없음", "reason": why}
+    tmp = Path(tempfile.mkdtemp(prefix="worldengine_rt_"))
+    try:
+        os.symlink(RUNTIME, tmp / "runtime")
+        (tmp / "vendor").mkdir()
+        os.symlink(os.path.abspath(_three_dir()), tmp / "vendor" / "three")
+        data = world if isinstance(world, dict) else json.loads(Path(world).read_text(encoding="utf-8"))
+        (tmp / "world.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        q = "runtime/index.html?world=/world.json&view=%s&mode=%s&w=%d&h=%d&t=%g&headless=1" % (view, mode, w, h, t)
+        if eye:
+            q += "&eye=" + eye
+        if selftest:
+            q += "&selftest=" + selftest
+        return _shoot(tmp, q, png_path, w, h, timeout_s)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _shoot(root: Path, rel_url: str, png_path, w, h, timeout_s) -> dict:
+    handler = functools.partial(_Quiet, directory=str(root))
+    with socketserver.TCPServer(("127.0.0.1", 0), handler) as srv:
+        port = srv.server_address[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        url = "http://127.0.0.1:%d/%s" % (port, rel_url)
+        try:
+            if _has_playwright():
+                return _render_playwright(url, png_path, w, h, timeout_s)
+            return _render_cli(url, png_path, w, h, timeout_s)
+        finally:
+            srv.shutdown()
 
 
 _ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
@@ -127,16 +163,21 @@ def _render_playwright(url, png_path, w, h, timeout_s) -> dict:
             b = pw.chromium.launch(**kw)
             try:
                 pg = b.new_page(viewport={"width": w, "height": h})
-                errs = []
+                errs, logs = [], []
                 pg.on("pageerror", lambda e: errs.append(str(e)))
+                pg.on("console", lambda m: logs.append(m.text))
                 pg.goto(url)
                 pg.wait_for_function("window.__done === true || window.__err !== null", timeout=timeout_s * 1000)
                 err = pg.evaluate("window.__err") or (errs[0] if errs else None)
                 if err and not pg.evaluate("window.__done === true"):
                     return {"ok": False, "backend": "없음", "reason": "페이지 오류: %s" % err[:200]}
                 Path(png_path).parent.mkdir(parents=True, exist_ok=True)
-                pg.locator("canvas").screenshot(path=str(png_path))
-                return {"ok": True, "backend": "three.js r170 · headless chromium (playwright)", "reason": ""}
+                pg.screenshot(path=str(png_path))
+                r = {"ok": True, "backend": "three.js r170 · headless chromium (playwright)", "reason": ""}
+                for line in logs:
+                    if line.startswith("WE_RESULT:"):
+                        r["result"] = json.loads(base64.b64decode(line[10:]).decode("utf-8"))
+                return r
             finally:
                 b.close()
     except Exception as e:                          # noqa: BLE001 -- timeouts etc. are 'not rendered' too
@@ -156,11 +197,15 @@ def _render_cli(url, png_path, w, h, timeout_s) -> dict:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
     except subprocess.TimeoutExpired:
         return {"ok": False, "backend": "없음", "reason": "chromium 시간 초과 (%ds)" % timeout_s}
-    status = re.findall(r'WE_STATUS:([^"]*)"', p.stderr)
+    status = re.findall(r'WE_STATUS:(.*?)", source:', p.stderr)
     if not status:
         return {"ok": False, "backend": "없음", "reason": "페이지가 완료 신호를 보내지 않았다 (chromium rc=%d)" % p.returncode}
     if status[0].startswith("err:"):
         return {"ok": False, "backend": "없음", "reason": "페이지 오류: %s" % status[0][4:200]}
     if not out.exists() or out.stat().st_size == 0:
         return {"ok": False, "backend": "없음", "reason": "스크린샷 파일이 없다"}
-    return {"ok": True, "backend": "three.js r170 · headless chromium (CLI)", "reason": ""}
+    r = {"ok": True, "backend": "three.js r170 · headless chromium (CLI)", "reason": ""}
+    res = re.findall(r'WE_RESULT:([A-Za-z0-9+/=]+)"', p.stderr)
+    if res:
+        r["result"] = json.loads(base64.b64decode(res[0]).decode("utf-8"))
+    return r

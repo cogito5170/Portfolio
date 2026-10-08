@@ -4,6 +4,9 @@
     example --list                       bundled scenes
     example <name> [--views aerial,eye]  render a bundled scene, e.g. hongdae/F1, store_module/tobe
     layout <file.json> [--key K]         your own layout file (for multiple floors, --key picks the floor)
+    world <file.world.json|example:NAME> [--views aerial,eye] [--mode orbit|walk] [--eye adult|child]
+                                         render a world through the modular runtime (engine/runtime)
+    serve [--port 8000] [--host 0.0.0.0] serve engine/ so a phone or PC on the same network can open the runtime
 
 Common: --out DIR (default engine/build), --w/--h (PNG size), --no-browser (skip headless rendering).
 Prints "산출물: <path>" lines and a "=== 보고 ===" summary that names the backend of every image.
@@ -61,7 +64,15 @@ def main(argv=None) -> int:
         a.add_argument("--out", default=str(OUT))
         a.add_argument("--w", type=int, default=1600); a.add_argument("--h", type=int, default=1000)
         a.add_argument("--no-browser", action="store_true")
+    a = sub.add_parser("world"); a.add_argument("src"); a.add_argument("--views", default="aerial,eye")
+    a.add_argument("--mode", default="orbit", choices=["orbit", "walk"]); a.add_argument("--eye")
+    a.add_argument("--out", default=str(OUT)); a.add_argument("--w", type=int, default=1280); a.add_argument("--h", type=int, default=800)
+    a = sub.add_parser("serve"); a.add_argument("--port", type=int, default=8000); a.add_argument("--host", default="0.0.0.0")
     a = ap.parse_args(argv)
+    if a.cmd == "world":
+        return _world(a)
+    if a.cmd == "serve":
+        return _serve(a)
     from worldengine import layout as LY, pipeline
 
     if a.cmd == "example":
@@ -80,6 +91,52 @@ def main(argv=None) -> int:
     r = pipeline.run(sc, out, stem, views=[v for v in a.views.split(",") if v], w=a.w, h=a.h,
                      try_browser=False if a.no_browser else None)
     _emit(sc["name"], out, stem, r)
+    return 0
+
+
+def _world(a) -> int:
+    from worldengine import headless, layout as LY, world as WD
+    if a.src.startswith("example:"):
+        w, stem = WD.from_scene(LY.to_scene(LY.examples()[a.src[8:]])), a.src[8:].replace("/", "_")
+    else:
+        w, stem = WD.load(a.src), Path(a.src).name.split(".")[0]
+    bad = WD.check(w)
+    if bad:
+        print("세계 파일 오류:\n  " + "\n  ".join(bad)); return 2
+    out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    print("산출물:", WD.save(w, out / (stem + ".world.json")))
+    backends = set()
+    for v in [x for x in a.views.split(",") if x]:
+        png = out / ("%s_%s_%s.png" % (stem, a.mode, v))
+        r = headless.render_world(w, png, view=v, w=a.w, h=a.h, mode=a.mode, eye=a.eye)
+        backends.add(r["backend"])
+        print(("산출물: %s" % png) if r["ok"] else "**그림 없음** %s: %s" % (v, r["reason"]))
+    print("=== 보고 ===")
+    print("%s — 런타임 렌더 · 모드 %s · 백엔드: %s" % (w["name"], a.mode, ", ".join(sorted(backends))))
+    return 0
+
+
+def _serve(a) -> int:
+    import functools
+    import http.server
+    import socket
+    ip = "127.0.0.1"
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1)); ip = s.getsockname()[0]   # no packet is sent; picks the LAN interface
+    except OSError:
+        pass
+    worlds = sorted(p.name for p in (ENGINE / "worlds").glob("*.world.json"))
+    print("engine/ 을 서빙한다. 같은 네트워크의 휴대폰·PC 브라우저에서:")
+    for wname in worlds:
+        print("  http://%s:%d/runtime/index.html?world=../worlds/%s" % (ip, a.port, wname))
+    print("(Ctrl+C 로 종료)")
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(ENGINE))
+    with http.server.ThreadingHTTPServer((a.host, a.port), handler) as srv:
+        try:
+            srv.serve_forever()
+        except KeyboardInterrupt:
+            pass
     return 0
 
 

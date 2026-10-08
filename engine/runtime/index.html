@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>worldengine</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#f4f1ea;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+#app canvas{display:block}</style>
+<script>window.__err = null; window.__done = false;
+addEventListener('error', e => { if (!window.__done) { window.__err = String(e.message || (e.target && (e.target.src || e.target.href)) || 'load error'); console.log('WE_STATUS:err:' + window.__err); } }, true);</script>
+<script type="importmap">{"imports":{"three":"../vendor/three/build/three.module.js","three/addons/":"../vendor/three/examples/jsm/"}}</script>
+</head>
+<body><div id="app"></div><script type="module" src="./src/main.js"></script></body>
+</html>
