@@ -1,0 +1,484 @@
+{
+ "format": "world/1",
+ "name": "기준 세계 C — 모듈러 거리",
+ "version": "1.0",
+ "about": "기준 세계관 — 표현력 시험 세트(SPEC 5절)용. 인터뷰 작가와 무관하게 일부러 극단으로 정했다 (7.1절). 모든 치수가 한 계열의 수에서만 나오는 세계.",
+ "bounds": [
+  24,
+  24,
+  6
+ ],
+ "concepts": [
+  {
+   "id": "modulor",
+   "title": "모듈러",
+   "statement": "치수는 사람의 몸에서 나온 두 수열에서만 고른다. 이 거리의 모든 높이·폭·깊이는 그 수열의 값이다.",
+   "sources": [
+    {
+     "who": "Le Corbusier",
+     "kind": "paraphrase",
+     "where": "Le Modulor (Éditions de l'Architecture d'Aujourd'hui, 1950) — 183 cm 인체 기준의 붉은 계열·푸른 계열 표 (cm 반올림값)",
+     "note": "수치만 미터로 옮겼다. 책의 글·그림은 옮기지 않았다. 계열 해석과 이 거리의 배치는 World Platform 이 정했다."
+    }
+   ],
+   "rules": [
+    {
+     "param": "rules.dimension_series",
+     "value": "red+blue",
+     "why": "모든 치수는 계열 값"
+    }
+   ],
+   "drives": [
+    "block0"
+   ]
+  }
+ ],
+ "rules": {
+  "axes": {
+   "density": 0.5,
+   "colour": 0.35,
+   "form": 0.1,
+   "texture": 0.3,
+   "motion": 0.2,
+   "sound": 0.2,
+   "narrative": 0.4
+  },
+  "constraints": [
+   {
+    "kind": "dimension_series",
+    "values_m": [
+     0.04,
+     0.06,
+     0.1,
+     0.13,
+     0.16,
+     0.2,
+     0.27,
+     0.33,
+     0.43,
+     0.53,
+     0.7,
+     0.86,
+     1.13,
+     1.4,
+     1.83,
+     2.26,
+     2.96,
+     3.66
+    ],
+    "series": {
+     "red": [
+      0.04,
+      0.06,
+      0.1,
+      0.16,
+      0.27,
+      0.43,
+      0.7,
+      1.13,
+      1.83,
+      2.96
+     ],
+     "blue": [
+      0.13,
+      0.2,
+      0.33,
+      0.53,
+      0.86,
+      1.4,
+      2.26,
+      3.66
+     ]
+    }
+   },
+   {
+    "kind": "palette",
+    "colours": [
+     "#e8e2d6",
+     "#b7b0a2",
+     "#c0392b",
+     "#2c5d8a",
+     "#1f1f1f"
+    ]
+   }
+  ]
+ },
+ "expressions": [
+  {
+   "medium": "web3d"
+  },
+  {
+   "medium": "image",
+   "plugin": "image_svg"
+  },
+  {
+   "medium": "drawing",
+   "plugin": "plotter"
+  }
+ ],
+ "environment": {
+  "background": "#dfe6ec",
+  "exposure": 0.95,
+  "ambient": 0.8
+ },
+ "materials": {
+  "concrete": {
+   "color": "#e8e2d6",
+   "roughness": 0.9
+  },
+  "wall0": {
+   "color": "#e8e2d6",
+   "roughness": 0.8
+  },
+  "wall1": {
+   "color": "#c0392b",
+   "roughness": 0.7
+  },
+  "wall2": {
+   "color": "#2c5d8a",
+   "roughness": 0.7
+  },
+  "window": {
+   "color": "#1f1f1f",
+   "roughness": 0.3
+  }
+ },
+ "entities": [
+  {
+   "id": "ground",
+   "type": "plane",
+   "pos": [
+    12,
+    12,
+    0
+   ],
+   "size": [
+    24,
+    24
+   ],
+   "material": "concrete"
+  },
+  {
+   "id": "block0",
+   "type": "box",
+   "pos": [
+    4.83,
+    8,
+    0
+   ],
+   "size": [
+    3.66,
+    3.66,
+    3.66
+   ],
+   "material": "wall0",
+   "solid": true,
+   "children": [
+    {
+     "id": "win0",
+     "type": "box",
+     "pos": [
+      0,
+      -1.85,
+      1.13
+     ],
+     "size": [
+      0.86,
+      0.04,
+      0.86
+     ],
+     "material": "window"
+    }
+   ]
+  },
+  {
+   "id": "block1",
+   "type": "box",
+   "pos": [
+    8.92,
+    8,
+    0
+   ],
+   "size": [
+    2.26,
+    2.26,
+    3.66
+   ],
+   "material": "wall1",
+   "solid": true,
+   "children": [
+    {
+     "id": "win1",
+     "type": "box",
+     "pos": [
+      0,
+      -1.15,
+      1.13
+     ],
+     "size": [
+      0.53,
+      0.04,
+      0.86
+     ],
+     "material": "window"
+    }
+   ]
+  },
+  {
+   "id": "block2",
+   "type": "box",
+   "pos": [
+    12.094999999999999,
+    8,
+    0
+   ],
+   "size": [
+    1.83,
+    2.96,
+    3.66
+   ],
+   "material": "wall2",
+   "solid": true,
+   "children": [
+    {
+     "id": "win2",
+     "type": "box",
+     "pos": [
+      0,
+      -1.5,
+      1.13
+     ],
+     "size": [
+      0.53,
+      0.04,
+      0.86
+     ],
+     "material": "window"
+    }
+   ]
+  },
+  {
+   "id": "block3",
+   "type": "box",
+   "pos": [
+    15.055,
+    8,
+    0
+   ],
+   "size": [
+    1.83,
+    3.66,
+    2.96
+   ],
+   "material": "wall0",
+   "solid": true,
+   "children": [
+    {
+     "id": "win3",
+     "type": "box",
+     "pos": [
+      0,
+      -1.85,
+      1.13
+     ],
+     "size": [
+      0.86,
+      0.04,
+      0.86
+     ],
+     "material": "window"
+    }
+   ]
+  },
+  {
+   "id": "block4",
+   "type": "box",
+   "pos": [
+    18.93,
+    8,
+    0
+   ],
+   "size": [
+    3.66,
+    3.66,
+    2.96
+   ],
+   "material": "wall1",
+   "solid": true,
+   "children": [
+    {
+     "id": "win4",
+     "type": "box",
+     "pos": [
+      0,
+      -1.85,
+      1.13
+     ],
+     "size": [
+      0.53,
+      0.04,
+      0.86
+     ],
+     "material": "window"
+    }
+   ]
+  },
+  {
+   "id": "col0",
+   "type": "cylinder",
+   "pos": [
+    4.0,
+    14,
+    0
+   ],
+   "radius": 0.165,
+   "height": 2.26,
+   "material": "concrete",
+   "solid": true
+  },
+  {
+   "id": "col1",
+   "type": "cylinder",
+   "pos": [
+    6.96,
+    14,
+    0
+   ],
+   "radius": 0.165,
+   "height": 2.26,
+   "material": "concrete",
+   "solid": true
+  },
+  {
+   "id": "col2",
+   "type": "cylinder",
+   "pos": [
+    9.92,
+    14,
+    0
+   ],
+   "radius": 0.165,
+   "height": 2.26,
+   "material": "concrete",
+   "solid": true
+  },
+  {
+   "id": "col3",
+   "type": "cylinder",
+   "pos": [
+    12.879999999999999,
+    14,
+    0
+   ],
+   "radius": 0.165,
+   "height": 2.26,
+   "material": "concrete",
+   "solid": true
+  },
+  {
+   "id": "col4",
+   "type": "cylinder",
+   "pos": [
+    15.84,
+    14,
+    0
+   ],
+   "radius": 0.165,
+   "height": 2.26,
+   "material": "concrete",
+   "solid": true
+  },
+  {
+   "id": "col5",
+   "type": "cylinder",
+   "pos": [
+    18.8,
+    14,
+    0
+   ],
+   "radius": 0.165,
+   "height": 2.26,
+   "material": "concrete",
+   "solid": true
+  },
+  {
+   "id": "bench",
+   "type": "box",
+   "pos": [
+    12,
+    16.5,
+    0
+   ],
+   "size": [
+    1.83,
+    0.43,
+    0.43
+   ],
+   "material": "wall1"
+  },
+  {
+   "id": "plinth",
+   "type": "box",
+   "pos": [
+    18,
+    16.5,
+    0
+   ],
+   "size": [
+    0.86,
+    0.86,
+    0.7
+   ],
+   "material": "wall2"
+  },
+  {
+   "id": "figure",
+   "type": "person",
+   "pos": [
+    12,
+    15.2,
+    0
+   ],
+   "height": 1.83,
+   "color": "#c0392b"
+  }
+ ],
+ "views": {
+  "aerial": {
+   "pos": [
+    0,
+    -6,
+    12
+   ],
+   "target": [
+    12,
+    11,
+    1
+   ],
+   "fov": 45
+  },
+  "eye": {
+   "pos": [
+    12,
+    11.5,
+    1.7
+   ],
+   "target": [
+    6,
+    8,
+    1.5
+   ],
+   "fov": 65
+  }
+ },
+ "player": {
+  "spawn": [
+   12,
+   12
+  ],
+  "yaw_deg": 180
+ },
+ "controls": {
+  "default": "orbit"
+ }
+}

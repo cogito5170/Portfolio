@@ -7,6 +7,8 @@
     world <file.world.json|example:NAME> [--views aerial,eye] [--mode orbit|walk] [--eye adult|child]
                                          render a world through the modular runtime (engine/runtime)
     serve [--port 8000] [--host 0.0.0.0] serve engine/ so a phone or PC on the same network can open the runtime
+    conform [--plugins DIR ...] [--out DIR]   conformance kit (G-05) for every plugin on the reference worlds + V-04 measurement
+    generate <world.json> --plugin NAME [--out DIR]   one plugin, one world: artifact + recipe (G-01)
     site [--out DIR] [--no-smoke]        static site (runtime + three.js + worlds + landing page); smoke-loads every world
     draw [--urdf U] [--svg F --scale S --center X,Y] [--views aerial,top] [--save-world]
                                          drawing robot: plan, verify (V-16), write a world, render it mid-drawing and done
@@ -78,7 +80,24 @@ def main(argv=None) -> int:
     a.add_argument("--save-world", action="store_true", help="also write worlds/drawing_robot.world.json")
     a.add_argument("--concept", default="klee", help="klee (demo concept card) | none | path to a JSON list of concept cards")
     a = sub.add_parser("site"); a.add_argument("--out", default=str(ENGINE / "build" / "site")); a.add_argument("--no-smoke", action="store_true")
+    a = sub.add_parser("conform"); a.add_argument("--plugins", nargs="*", default=[]); a.add_argument("--out", default=str(OUT))
+    a = sub.add_parser("generate"); a.add_argument("world"); a.add_argument("--plugin", required=True); a.add_argument("--out", default=str(OUT))
     a = ap.parse_args(argv)
+    if a.cmd == "conform":
+        return _conform(a)
+    if a.cmd == "generate":
+        from worldengine import plugins as PL, world as WD
+        w, p = WD.load(a.world), PL.discover()[a.plugin]
+        r = PL.generate(p, w)
+        out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+        stem = "%s_%s" % (Path(a.world).name.split(".")[0], a.plugin)
+        ext = {"image/svg+xml": ".svg"}.get(r["media_type"], ".bin")
+        art = out / (stem + ext)
+        (art.write_text if isinstance(r["artifact"], str) else art.write_bytes)(r["artifact"])
+        (out / (stem + ".recipe.json")).write_text(json.dumps(r["recipe"], ensure_ascii=False, indent=1), encoding="utf-8")
+        print("산출물:", art); print("산출물:", out / (stem + ".recipe.json"))
+        print("=== 보고 ===\n%s · %s" % (r["media_type"], r.get("notes", "")))
+        return 0
     if a.cmd == "site":
         from worldengine import site
         r = site.build(a.out)
@@ -138,6 +157,29 @@ def _world(a) -> int:
     print("=== 보고 ===")
     print("%s — 런타임 렌더 · 모드 %s · 백엔드: %s" % (w["name"], a.mode, ", ".join(sorted(backends))))
     return 0
+
+
+REFERENCE = ("ref_yeobaek", "ref_festival_baroque", "ref_modulor")
+
+
+def _conform(a) -> int:
+    from worldengine import conformance as CF, measure as MS, plugins as PL, world as WD
+    worlds = {n: WD.load(ENGINE / "worlds" / (n + ".world.json")) for n in REFERENCE}
+    P = PL.discover(extra_dirs=a.plugins)
+    rows, res = [], []
+    for pn, p in P.items():
+        rows += CF.run(p, list(worlds.values()))
+        res += [{"plugin": pn, "world": n, "svg": PL.generate(p, w)["artifact"]} for n, w in worlds.items() if p["medium"] in ("image", "drawing")]
+    d = MS.distinctness(res, worlds)
+    L = ["# 적합성 시험 (G-05) · 기준 세계 %d개 · 플러그인 %d개" % (len(worlds), len(P)), "", "| 플러그인 | 세계 | 조항 | 결과 | 내용 |", "|---|---|---|---|---|"]
+    L += ["| %s | %s | %s | %s | %s |" % (r["plugin"], r["world"], r["clause"], "통과" if r["ok"] else "**실패**", r["detail"]) for r in rows]
+    L += ["", "# V-04 첫 측정 (목표 미정)", "", "측정기: `worldengine/measure.py` — 결과물 SVG 만 읽는다, 플러그인을 부르지 않는다. 방법은 그 파일 머리말.", "",
+          "| 플러그인 | 세계 | 측정 축 (밀도·색·형태·질감·움직임) | 가장 가까운 세계 | 자기 세계 순위 |", "|---|---|---|---|---|"]
+    L += ["| %s | %s | %s | %s | %d |" % (r["plugin"], r["world"], " · ".join("%.2f" % r["measured"][k] for k in MS.MEASURED), r["nearest"], r["own_rank"]) for r in d]
+    out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    md = out / "conformance.md"; md.write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("산출물:", md); print("=== 보고 ==="); print("\n".join(L))
+    return 0 if all(r["ok"] for r in rows) else 1
 
 
 def _draw(a) -> int:

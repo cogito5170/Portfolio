@@ -1,0 +1,1323 @@
+{
+ "format": "world/1",
+ "name": "기준 세계 B — 축제 바로크",
+ "version": "1.0",
+ "about": "기준 세계관 — 표현력 시험 세트(SPEC 5절)용. 인터뷰 작가와 무관하게 일부러 극단으로 정했다 (7.1절). 빈 곳이 없을 때까지 채운 세계.",
+ "bounds": [
+  24,
+  24,
+  10
+ ],
+ "concepts": [
+  {
+   "id": "excess",
+   "title": "넘침",
+   "statement": "빈 곳은 아직 장식하지 않은 곳일 뿐이다. 모든 것이 돌고, 빛나고, 겹친다.",
+   "sources": [
+    {
+     "who": "World Platform 기준 세계관",
+     "kind": "own",
+     "note": "'바로크'는 양식 이름을 빌린 비유일 뿐, 특정 작품의 인용이 아니다"
+    }
+   ],
+   "rules": [],
+   "drives": [
+    "crown"
+   ]
+  }
+ ],
+ "rules": {
+  "axes": {
+   "density": 0.95,
+   "colour": 0.95,
+   "form": 0.85,
+   "texture": 0.8,
+   "motion": 0.85,
+   "sound": 0.9,
+   "narrative": 0.7
+  },
+  "constraints": [
+   {
+    "kind": "palette",
+    "colours": [
+     "#2a0a3d",
+     "#ffd23f",
+     "#ff3c7e",
+     "#00d1c1",
+     "#ff7a1a",
+     "#7b2cff",
+     "#2ee86b",
+     "#ff2a2a"
+    ]
+   }
+  ]
+ },
+ "expressions": [
+  {
+   "medium": "web3d"
+  },
+  {
+   "medium": "image",
+   "plugin": "image_svg"
+  },
+  {
+   "medium": "drawing",
+   "plugin": "plotter"
+  }
+ ],
+ "environment": {
+  "background": "#1a0526",
+  "exposure": 1.1,
+  "ambient": 0.6,
+  "sun": {
+   "intensity": 1.6
+  }
+ },
+ "materials": {
+  "tile": {
+   "color": "#2a0a3d",
+   "roughness": 0.5,
+   "metalness": 0.3
+  },
+  "c0": {
+   "color": "#ffd23f",
+   "roughness": 0.25,
+   "metalness": 0.6,
+   "emissive": "#ffd23f",
+   "emissive_intensity": 0.35
+  },
+  "c1": {
+   "color": "#ff3c7e",
+   "roughness": 0.25,
+   "metalness": 0.6,
+   "emissive": "#ff3c7e",
+   "emissive_intensity": 0.35
+  },
+  "c2": {
+   "color": "#00d1c1",
+   "roughness": 0.25,
+   "metalness": 0.6,
+   "emissive": "#00d1c1",
+   "emissive_intensity": 0.35
+  },
+  "c3": {
+   "color": "#ff7a1a",
+   "roughness": 0.25,
+   "metalness": 0.6,
+   "emissive": "#ff7a1a",
+   "emissive_intensity": 0.35
+  },
+  "c4": {
+   "color": "#7b2cff",
+   "roughness": 0.25,
+   "metalness": 0.6,
+   "emissive": "#7b2cff",
+   "emissive_intensity": 0.35
+  },
+  "c5": {
+   "color": "#2ee86b",
+   "roughness": 0.25,
+   "metalness": 0.6,
+   "emissive": "#2ee86b",
+   "emissive_intensity": 0.35
+  },
+  "c6": {
+   "color": "#ff2a2a",
+   "roughness": 0.25,
+   "metalness": 0.6,
+   "emissive": "#ff2a2a",
+   "emissive_intensity": 0.35
+  }
+ },
+ "entities": [
+  {
+   "id": "ground",
+   "type": "plane",
+   "pos": [
+    12,
+    12,
+    0
+   ],
+   "size": [
+    24,
+    24
+   ],
+   "material": "tile"
+  },
+  {
+   "id": "arch0",
+   "type": "arch",
+   "pos": [
+    20.0,
+    12.0,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    90.0
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c0"
+  },
+  {
+   "id": "arch1",
+   "type": "arch",
+   "pos": [
+    19.391036260090296,
+    15.061467458920719,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    112.5
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c1"
+  },
+  {
+   "id": "arch2",
+   "type": "arch",
+   "pos": [
+    17.65685424949238,
+    17.65685424949238,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    135.0
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c2"
+  },
+  {
+   "id": "arch3",
+   "type": "arch",
+   "pos": [
+    15.061467458920719,
+    19.391036260090296,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    157.5
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c3"
+  },
+  {
+   "id": "arch4",
+   "type": "arch",
+   "pos": [
+    12.0,
+    20.0,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    180.0
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c4"
+  },
+  {
+   "id": "arch5",
+   "type": "arch",
+   "pos": [
+    8.938532541079283,
+    19.391036260090296,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    202.5
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c5"
+  },
+  {
+   "id": "arch6",
+   "type": "arch",
+   "pos": [
+    6.34314575050762,
+    17.65685424949238,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    225.0
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c6"
+  },
+  {
+   "id": "arch7",
+   "type": "arch",
+   "pos": [
+    4.608963739909706,
+    15.061467458920719,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    247.5
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c0"
+  },
+  {
+   "id": "arch8",
+   "type": "arch",
+   "pos": [
+    4.0,
+    12.000000000000002,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    270.0
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c1"
+  },
+  {
+   "id": "arch9",
+   "type": "arch",
+   "pos": [
+    4.608963739909705,
+    8.938532541079283,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    292.5
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c2"
+  },
+  {
+   "id": "arch10",
+   "type": "arch",
+   "pos": [
+    6.3431457505076185,
+    6.34314575050762,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    315.0
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c3"
+  },
+  {
+   "id": "arch11",
+   "type": "arch",
+   "pos": [
+    8.938532541079278,
+    4.608963739909708,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    337.5
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c4"
+  },
+  {
+   "id": "arch12",
+   "type": "arch",
+   "pos": [
+    11.999999999999998,
+    4.0,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    360.0
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c5"
+  },
+  {
+   "id": "arch13",
+   "type": "arch",
+   "pos": [
+    15.06146745892072,
+    4.608963739909707,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    382.5
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c6"
+  },
+  {
+   "id": "arch14",
+   "type": "arch",
+   "pos": [
+    17.65685424949238,
+    6.3431457505076185,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    405.0
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c0"
+  },
+  {
+   "id": "arch15",
+   "type": "arch",
+   "pos": [
+    19.391036260090292,
+    8.938532541079276,
+    0
+   ],
+   "rot": [
+    0,
+    0,
+    427.5
+   ],
+   "width": 1.4,
+   "height": 2.6,
+   "depth": 0.5,
+   "thickness": 0.35,
+   "material": "c1"
+  },
+  {
+   "id": "orb0",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    1.0
+   ],
+   "radius": 0.3147665529666325,
+   "material": "c0",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 3,
+     "period_s": 6
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.3
+    }
+   ]
+  },
+  {
+   "id": "orb1",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    1.9
+   ],
+   "radius": 0.2801698347849004,
+   "material": "c1",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 4,
+     "period_s": 7
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.35
+    }
+   ]
+  },
+  {
+   "id": "orb2",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    2.8
+   ],
+   "radius": 0.3801868946079707,
+   "material": "c2",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 5,
+     "period_s": 8
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.4
+    }
+   ]
+  },
+  {
+   "id": "orb3",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    3.7
+   ],
+   "radius": 0.26448725733350853,
+   "material": "c3",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 6,
+     "period_s": 9
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.45
+    }
+   ]
+  },
+  {
+   "id": "orb4",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    4.6
+   ],
+   "radius": 0.35717640086133784,
+   "material": "c4",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 7,
+     "period_s": 10
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.3
+    }
+   ]
+  },
+  {
+   "id": "orb5",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    5.5
+   ],
+   "radius": 0.3231377833825171,
+   "material": "c5",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 3,
+     "period_s": 11
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.35
+    }
+   ]
+  },
+  {
+   "id": "orb6",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    1.0
+   ],
+   "radius": 0.26159978495494135,
+   "material": "c6",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 4,
+     "period_s": 12
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.4
+    }
+   ]
+  },
+  {
+   "id": "orb7",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    1.9
+   ],
+   "radius": 0.35148714663788405,
+   "material": "c0",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 5,
+     "period_s": 13
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.45
+    }
+   ]
+  },
+  {
+   "id": "orb8",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    2.8
+   ],
+   "radius": 0.257499131688397,
+   "material": "c1",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 6,
+     "period_s": 14
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.3
+    }
+   ]
+  },
+  {
+   "id": "orb9",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    3.7
+   ],
+   "radius": 0.3367291367324772,
+   "material": "c2",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 7,
+     "period_s": 6
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.35
+    }
+   ]
+  },
+  {
+   "id": "orb10",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    4.6
+   ],
+   "radius": 0.2639710847149238,
+   "material": "c3",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 3,
+     "period_s": 7
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.4
+    }
+   ]
+  },
+  {
+   "id": "orb11",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    5.5
+   ],
+   "radius": 0.268142602668773,
+   "material": "c4",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 4,
+     "period_s": 8
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.45
+    }
+   ]
+  },
+  {
+   "id": "orb12",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    1.0
+   ],
+   "radius": 0.3349038378285028,
+   "material": "c5",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 5,
+     "period_s": 9
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.3
+    }
+   ]
+  },
+  {
+   "id": "orb13",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    1.9
+   ],
+   "radius": 0.4153704249344076,
+   "material": "c6",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 6,
+     "period_s": 10
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.35
+    }
+   ]
+  },
+  {
+   "id": "orb14",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    2.8
+   ],
+   "radius": 0.2747603922299291,
+   "material": "c0",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 7,
+     "period_s": 11
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.4
+    }
+   ]
+  },
+  {
+   "id": "orb15",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    3.7
+   ],
+   "radius": 0.2946477929214029,
+   "material": "c1",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 3,
+     "period_s": 12
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.45
+    }
+   ]
+  },
+  {
+   "id": "orb16",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    4.6
+   ],
+   "radius": 0.3754866444811179,
+   "material": "c2",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 4,
+     "period_s": 13
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.3
+    }
+   ]
+  },
+  {
+   "id": "orb17",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    5.5
+   ],
+   "radius": 0.43954178849140113,
+   "material": "c3",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 5,
+     "period_s": 14
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.35
+    }
+   ]
+  },
+  {
+   "id": "orb18",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    1.0
+   ],
+   "radius": 0.3654205897234997,
+   "material": "c4",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 6,
+     "period_s": 6
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.4
+    }
+   ]
+  },
+  {
+   "id": "orb19",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    1.9
+   ],
+   "radius": 0.32933609493015603,
+   "material": "c5",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 7,
+     "period_s": 7
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.45
+    }
+   ]
+  },
+  {
+   "id": "orb20",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    2.8
+   ],
+   "radius": 0.44525102111858406,
+   "material": "c6",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 3,
+     "period_s": 8
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.3
+    }
+   ]
+  },
+  {
+   "id": "orb21",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    3.7
+   ],
+   "radius": 0.25931653612355127,
+   "material": "c0",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 4,
+     "period_s": 9
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.35
+    }
+   ]
+  },
+  {
+   "id": "orb22",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    4.6
+   ],
+   "radius": 0.4216936918097359,
+   "material": "c1",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 5,
+     "period_s": 10
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.4
+    }
+   ]
+  },
+  {
+   "id": "orb23",
+   "type": "sphere",
+   "pos": [
+    12,
+    12,
+    5.5
+   ],
+   "radius": 0.30792185726633525,
+   "material": "c2",
+   "behaviors": [
+    {
+     "type": "orbit",
+     "center": [
+      12,
+      12
+     ],
+     "radius": 6,
+     "period_s": 11
+    },
+    {
+     "type": "bob",
+     "amp": 0.3,
+     "hz": 0.45
+    }
+   ]
+  },
+  {
+   "id": "halo0",
+   "type": "torus",
+   "pos": [
+    12,
+    12,
+    2.0
+   ],
+   "radius": 2.2,
+   "tube": 0.12,
+   "material": "c3",
+   "behaviors": [
+    {
+     "type": "spin",
+     "axis": "z",
+     "deg_per_s": -30
+    }
+   ]
+  },
+  {
+   "id": "halo1",
+   "type": "torus",
+   "pos": [
+    12,
+    12,
+    3.2
+   ],
+   "radius": 1.9500000000000002,
+   "tube": 0.12,
+   "material": "c4",
+   "behaviors": [
+    {
+     "type": "spin",
+     "axis": "z",
+     "deg_per_s": 60
+    }
+   ]
+  },
+  {
+   "id": "halo2",
+   "type": "torus",
+   "pos": [
+    12,
+    12,
+    4.4
+   ],
+   "radius": 1.7000000000000002,
+   "tube": 0.12,
+   "material": "c5",
+   "behaviors": [
+    {
+     "type": "spin",
+     "axis": "z",
+     "deg_per_s": -90
+    }
+   ]
+  },
+  {
+   "id": "halo3",
+   "type": "torus",
+   "pos": [
+    12,
+    12,
+    5.6
+   ],
+   "radius": 1.4500000000000002,
+   "tube": 0.12,
+   "material": "c6",
+   "behaviors": [
+    {
+     "type": "spin",
+     "axis": "z",
+     "deg_per_s": 120
+    }
+   ]
+  },
+  {
+   "id": "halo4",
+   "type": "torus",
+   "pos": [
+    12,
+    12,
+    6.8
+   ],
+   "radius": 1.2000000000000002,
+   "tube": 0.12,
+   "material": "c0",
+   "behaviors": [
+    {
+     "type": "spin",
+     "axis": "z",
+     "deg_per_s": -150
+    }
+   ]
+  },
+  {
+   "id": "halo5",
+   "type": "torus",
+   "pos": [
+    12,
+    12,
+    8.0
+   ],
+   "radius": 0.9500000000000002,
+   "tube": 0.12,
+   "material": "c1",
+   "behaviors": [
+    {
+     "type": "spin",
+     "axis": "z",
+     "deg_per_s": 180
+    }
+   ]
+  },
+  {
+   "id": "crown",
+   "type": "cone",
+   "pos": [
+    12,
+    12,
+    9.2
+   ],
+   "radius": 0.8,
+   "height": 1.2,
+   "material": "c0",
+   "behaviors": [
+    {
+     "type": "spin",
+     "axis": "z",
+     "deg_per_s": 90
+    }
+   ]
+  },
+  {
+   "id": "lamp0",
+   "type": "light",
+   "pos": [
+    18.0,
+    12.0,
+    4
+   ],
+   "kind": "point",
+   "color": "#ffd23f",
+   "intensity": 30,
+   "distance": 14
+  },
+  {
+   "id": "lamp1",
+   "type": "light",
+   "pos": [
+    12.0047779602644,
+    17.999998097591007,
+    4
+   ],
+   "kind": "point",
+   "color": "#ff3c7e",
+   "intensity": 30,
+   "distance": 14
+  },
+  {
+   "id": "lamp2",
+   "type": "light",
+   "pos": [
+    6.000007609634763,
+    12.00955591749892,
+    4
+   ],
+   "kind": "point",
+   "color": "#00d1c1",
+   "intensity": 30,
+   "distance": 14
+  },
+  {
+   "id": "lamp3",
+   "type": "light",
+   "pos": [
+    11.98566613132631,
+    6.000017121673692,
+    4
+   ],
+   "kind": "point",
+   "color": "#ff7a1a",
+   "intensity": 30,
+   "distance": 14
+  }
+ ],
+ "views": {
+  "aerial": {
+   "pos": [
+    -2,
+    -6,
+    14
+   ],
+   "target": [
+    12,
+    12,
+    3
+   ],
+   "fov": 50
+  },
+  "eye": {
+   "pos": [
+    12,
+    1,
+    1.7
+   ],
+   "target": [
+    12,
+    12,
+    3
+   ],
+   "fov": 65
+  }
+ },
+ "player": {
+  "spawn": [
+   12,
+   1.5
+  ],
+  "yaw_deg": 90
+ },
+ "controls": {
+  "default": "orbit"
+ }
+}
