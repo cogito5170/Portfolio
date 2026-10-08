@@ -1,7 +1,7 @@
 {
  "format": "world/1",
  "name": "모순의 정원 — 중세 아치와 크롬 행성 (데모)",
- "about": "Runtime demo, not an artist's work. Juxtaposition (SPEC 모순 합성): a medieval arcade and a metallic future share one courtyard; the low arch is sized for a child's eye (1.1 m), the tall one for an adult's (1.7 m).",
+ "about": "런타임 데모 — 작가 작품이 아니다. 병치(SPEC 모순 합성): 중세 아케이드와 금속성 미래가 한 마당에 있다. 낮은 아치는 아이 눈높이(1.1 m), 높은 아치는 어른 눈높이(1.7 m)에 맞췄다.",
  "bounds": [24, 24, 8],
  "environment": {"background": "#e9edf2", "exposure": 0.9, "ambient": 0.7, "sun": {"dir": [-0.35, -0.45, 0.8], "intensity": 2.4}},
  "materials": {

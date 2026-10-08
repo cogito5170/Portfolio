@@ -7,6 +7,7 @@
     world <file.world.json|example:NAME> [--views aerial,eye] [--mode orbit|walk] [--eye adult|child]
                                          render a world through the modular runtime (engine/runtime)
     serve [--port 8000] [--host 0.0.0.0] serve engine/ so a phone or PC on the same network can open the runtime
+    site [--out DIR] [--no-smoke]        static site (runtime + three.js + worlds + landing page); smoke-loads every world
     draw [--urdf U] [--svg F --scale S --center X,Y] [--views aerial,top] [--save-world]
                                          drawing robot: plan, verify (V-16), write a world, render it mid-drawing and done
 
@@ -76,7 +77,20 @@ def main(argv=None) -> int:
     a.add_argument("--out", default=str(OUT)); a.add_argument("--w", type=int, default=1280); a.add_argument("--h", type=int, default=800)
     a.add_argument("--save-world", action="store_true", help="also write worlds/drawing_robot.world.json")
     a.add_argument("--concept", default="klee", help="klee (demo concept card) | none | path to a JSON list of concept cards")
+    a = sub.add_parser("site"); a.add_argument("--out", default=str(ENGINE / "build" / "site")); a.add_argument("--no-smoke", action="store_true")
     a = ap.parse_args(argv)
+    if a.cmd == "site":
+        from worldengine import site
+        r = site.build(a.out)
+        print("산출물:", r["out"])
+        bad = []
+        if not a.no_smoke:
+            for s_ in site.smoke(a.out):
+                print("%s %s%s" % ("열림" if s_["ok"] else "**안 열림**", s_["file"], "" if s_["ok"] else " — " + s_["reason"]))
+                bad += [] if s_["ok"] else [s_["file"]]
+        print("=== 보고 ===")
+        print("작품 %d개 · 스모크 %s" % (len(r["worlds"]), "생략" if a.no_smoke else ("모두 열림" if not bad else "실패 %d" % len(bad))))
+        return 1 if bad else 0
     if a.cmd == "draw":
         return _draw(a)
     if a.cmd == "world":

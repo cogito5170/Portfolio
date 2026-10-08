@@ -80,6 +80,16 @@ python3 -m unittest discover -s tests -v   # node 가 있으면 runtime/tests/*.
 
 보고의 `백엔드:` 줄이 각 그림을 실제로 무엇이 그렸는지 말한다: `three.js r170 · headless chromium (CLI|playwright)` / `matplotlib 대체(비실사)` / `없음`.
 
+## 링크로 공유 (XR-06)
+
+```bash
+python3 -m worldengine site            # → engine/build/site : runtime + three.js + worlds + 목록 페이지(index.html), 1.7 MB
+```
+모든 경로가 상대 경로라 어떤 정적 호스트에도 올라간다 (서버 코드 없음). 만든 폴더에서 작품마다 실제 방문 URL 로 헤드리스 로드를 해 본다 (`tests/test_site.py` 도 같은 검사).
+file:// 로 직접 열면 브라우저가 모듈·fetch 를 막으니 정적 서버(`python3 -m http.server`)나 호스팅이 필요하다.
+
+GitHub Pages: `.github/workflows/pages.yml` 이 main 에서만 배포한다. **꺼져 있다** — 저장소 주인이 Settings → Pages → Source 를 "GitHub Actions" 로 두고, Actions 변수 `PAGES_ENABLED=true` 를 만들어야 돈다. 공개 여부는 사용자가 정한다.
+
 ## 헤드리스 렌더 (브라우저 찾는 순서)
 
 1. `WE_CHROMIUM` 환경변수

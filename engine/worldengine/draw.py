@@ -287,7 +287,7 @@ def world(p: dict, name: str = "그림 그리는 로봇 (데모)", at=(6.0, 6.0)
     pad = 0.15
     return {
         "format": "world/1", "name": name,
-        "about": "Planned in Python (worldengine.draw, reference FK from kinematics/), played and inked by the runtime's own FK.",
+        "about": "데모 — 작가 작품이 아니다. 관절 팔이 개념 카드의 규칙대로 그림을 그린다. 경로는 Python 이 계획·검증(V-16)하고, 브라우저가 자기 기구학으로 재생하며 잉크를 남긴다.",
         "bounds": [ax + px1 + 4, ay + py1 + 4, 5],
         "environment": {"background": "#eceae6", "exposure": 0.95, "ambient": 0.8},
         "materials": {"floor": {"color": "#ffffff", "roughness": 0.6, "texture": {"kind": "speckle", "colors": ["#cfcbc4", "#bdb8af", "#e0dcd5"], "size_m": 3}},
