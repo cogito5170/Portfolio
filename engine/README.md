@@ -74,7 +74,7 @@ python3 -m unittest discover -s tests -v   # node 가 있으면 runtime/tests/*.
 
 1. `WE_CHROMIUM` 환경변수
 2. `/opt/pw-browsers/chromium_headless_shell-*/chrome-linux/headless_shell` — 뷰포트가 `--window-size` 와 정확히 같다
-3. `/opt/pw-browsers/chromium-*/chrome-linux/chrome` — `--headless=new` 에서 아래쪽에 빈 띠가 생긴 적이 있다 (테스트가 잡는다)
+3. `/opt/pw-browsers/chromium-*/chrome-linux/chrome` — `--headless=new` 에서 뷰포트가 창보다 짧아 아래쪽에 빈 띠가 생긴다. 페이지가 실제 뷰포트를 알려 주면(`WE_VIEWPORT`) 모자란 만큼 창을 키워 다시 찍고 요청 크기로 자른다. 이 브라우저는 창 폭이 최소 500 px 이라 더 좁은 요청(휴대폰 390 px)은 결과의 `viewport` 에 실제 폭(500)이 남는다
 4. PATH 의 `chromium` / `chromium-browser` / `google-chrome`
 
 페이지는 `window.__done` / `window.__err` 로 상태를 알리고, 서빙할 때 넣는 작은 스크립트가 이를 `console.log("WE_STATUS:...")` 로 바꿔 stderr 에서 읽는다. 오류 페이지는 스크린샷을 성공으로 내지 않는다.

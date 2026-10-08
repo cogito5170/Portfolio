@@ -23,7 +23,7 @@ try {
   }
   if (HEADLESS) eng.step(+(P.get('t') || 0));
   else { hud(eng); eng.start(); }
-  window.__done = true; say('done');
+  window.__done = true; console.log(`WE_VIEWPORT:${innerWidth},${innerHeight}`); say('done');
 } catch (e) {
   window.__err = String((e && e.message) || e); say('err:' + window.__err);
   const d = document.createElement('pre'); d.style.cssText = 'position:fixed;inset:auto 10px 10px 10px;background:#fff;color:#b00;padding:8px;white-space:pre-wrap';

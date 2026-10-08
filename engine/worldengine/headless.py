@@ -35,7 +35,7 @@ from pathlib import Path
 VENDORED_THREE = Path(__file__).resolve().parent.parent / "vendor" / "three"
 RUNTIME = Path(__file__).resolve().parent.parent / "runtime"
 _STATUS_JS = """<script>(function poll(){
-  if (window.__done === true) { console.log('WE_STATUS:done'); return; }
+  if (window.__done === true) { console.log('WE_VIEWPORT:' + innerWidth + ',' + innerHeight); console.log('WE_STATUS:done'); return; }
   if (window.__err !== null && window.__err !== undefined) { console.log('WE_STATUS:err:' + window.__err); return; }
   setTimeout(poll, 50);
 })();</script></body>"""
@@ -184,14 +184,40 @@ def _render_playwright(url, png_path, w, h, timeout_s) -> dict:
         return {"ok": False, "backend": "없음", "reason": "%s: %s" % (type(e).__name__, str(e).splitlines()[0][:160])}
 
 
+_VIEWPORT_PAD: "dict[str, tuple[int, int]]" = {}   # per browser binary: window size minus viewport size, measured
+
+
 def _render_cli(url, png_path, w, h, timeout_s) -> dict:
+    """The full browser in --headless=new gives the page a viewport smaller than --window-size but screenshots
+    the whole window, which leaves a flat band at the bottom. The page reports its viewport (WE_VIEWPORT); if it
+    is short, shoot again with the window enlarged by the difference and crop to w x h. headless_shell needs no pad."""
     exe = _chromium()
+    pad = _VIEWPORT_PAD.get(exe, (0, 0))
+    r = _cli_once(exe, url, png_path, w + pad[0], h + pad[1], timeout_s)
+    vp = r.get("_viewport")
+    if r["ok"] and vp and (vp[0] < w or vp[1] < h):                 # short viewport: enlarge the window once
+        _VIEWPORT_PAD[exe] = pad = (pad[0] + max(0, w - vp[0]), pad[1] + max(0, h - vp[1]))
+        r = _cli_once(exe, url, png_path, w + pad[0], h + pad[1], timeout_s)
+        vp = r.get("_viewport")
+        if r["ok"] and vp and (vp[0] < w or vp[1] < h):
+            return {"ok": False, "backend": "없음", "reason": "뷰포트를 %dx%d 로 맞추지 못했다 (%s)" % (w, h, vp)}
+    if r["ok"]:
+        from worldengine import png
+        png.crop(png_path, w, h)          # the canvas is w x h at the top left; drop any window area around it
+        r["viewport"] = list(vp) if vp else None
+        # The full browser has a minimum window width (500 px here): a narrower request still renders a w x h
+        # canvas, but the page's own viewport is wider. Recorded so a phone-width result is not over-claimed.
+    r.pop("_viewport", None)
+    return r
+
+
+def _cli_once(exe, url, png_path, ww, wh, timeout_s) -> dict:
     Path(png_path).parent.mkdir(parents=True, exist_ok=True)
     out = Path(png_path).resolve()
     if out.exists():
         out.unlink()
     cmd = [exe, "--headless=new", "--no-sandbox", "--hide-scrollbars", *_ARGS,
-           "--enable-logging=stderr", "--v=0", "--window-size=%d,%d" % (w, h),
+           "--enable-logging=stderr", "--v=0", "--window-size=%d,%d" % (ww, wh),
            "--virtual-time-budget=%d" % int(min(timeout_s, 60) * 1000), "--screenshot=%s" % out, url]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
@@ -205,6 +231,9 @@ def _render_cli(url, png_path, w, h, timeout_s) -> dict:
     if not out.exists() or out.stat().st_size == 0:
         return {"ok": False, "backend": "없음", "reason": "스크린샷 파일이 없다"}
     r = {"ok": True, "backend": "three.js r170 · headless chromium (CLI)", "reason": ""}
+    vp = re.findall(r'WE_VIEWPORT:(\d+),(\d+)"', p.stderr)
+    if vp:
+        r["_viewport"] = (int(vp[0][0]), int(vp[0][1]))
     res = re.findall(r'WE_RESULT:([A-Za-z0-9+/=]+)"', p.stderr)
     if res:
         r["result"] = json.loads(base64.b64decode(res[0]).decode("utf-8"))
