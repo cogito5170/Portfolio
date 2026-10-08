@@ -50,7 +50,15 @@ def _tools():
     return shutil.which("unshare"), shutil.which("python3"), shutil.which("node")
 
 
+def _procs_of(uid) -> int:
+    return sum(1 for d in Path("/proc").iterdir() if d.name.isdigit() and _uid_of(d) == uid)
+
+
 def _drop(lim, address_mb=None):
+    # As root we switch to SANDBOX_UID, whose quota is all ours. As an ordinary user (CI runners) the uid cannot
+    # change, and RLIMIT_NPROC counts every process that user already has -- so the quota is relative: existing + nproc.
+    nproc = lim["nproc"] if os.getuid() == 0 else _procs_of(os.getuid()) + lim["nproc"]
+
     def pre():
         os.setsid()
         mb = 1024 * 1024
@@ -60,7 +68,7 @@ def _drop(lim, address_mb=None):
         resource.setrlimit(resource.RLIMIT_FSIZE, (lim["fsize_mb"] * mb, lim["fsize_mb"] * mb))
         if os.getuid() == 0:
             os.setgroups([]); os.setgid(SANDBOX_UID); os.setuid(SANDBOX_UID)
-        resource.setrlimit(resource.RLIMIT_NPROC, (lim["nproc"], lim["nproc"]))
+        resource.setrlimit(resource.RLIMIT_NPROC, (nproc, nproc))
     return pre
 
 

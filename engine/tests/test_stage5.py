@@ -121,7 +121,7 @@ class SandboxEscapeTests(unittest.TestCase):
 
     def test_fork_bomb(self):
         r = self.run_py("import os,json\nn=0\ntry:\n  while True:\n    if os.fork()==0:\n      import time; time.sleep(30); os._exit(0)\n    n+=1\nexcept OSError: print(json.dumps({'forks':n}))")
-        self.assertLessEqual(r["result"]["forks"], SB.LIMITS["nproc"])
+        self.assertLessEqual(r["result"]["forks"], SB.LIMITS["nproc"])      # the quota is the sandbox's own (root: own uid; user: existing + nproc)
         self.assertEqual(SB.run("print('{\"alive\": 1}')")["result"], {"alive": 1})     # children died with it; quota free again
 
     def test_memory(self):
