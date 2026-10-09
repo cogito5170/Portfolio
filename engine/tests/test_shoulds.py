@@ -20,7 +20,9 @@ sys.path.insert(0, str(ENGINE))
 
 import shutil  # noqa: E402
 
-from worldengine import footprint as FP, headless, robot as RB, video as VD, world as WD  # noqa: E402
+import zipfile  # noqa: E402
+
+from worldengine import footprint as FP, headless, licenses as LC, preserve as PV, robot as RB, video as VD, world as WD  # noqa: E402
 from worldengine.studio import diff as DF  # noqa: E402
 
 URDFS = ["planar_3_dof", "arm_6_dof", "planar_arm_with_fixed", "planar_3_dof_diff_links"]
@@ -120,6 +122,88 @@ class TourVideoTests(unittest.TestCase):
             self.assertIn(c, sub)
         self.assertTrue(r["ended"])
         self.assertAlmostEqual(float(pr["format"]["duration"]), r["seconds"], delta=0.2)
+
+
+class PreservationTests(unittest.TestCase):
+    """N-06: a bundle plays and regenerates with the code that made it."""
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp())
+        cls.zip = cls.tmp / "baroque.zip"
+        cls.r = PV.bundle(WD.load(ENGINE / "worlds" / "ref_festival_baroque.world.json"), cls.zip)
+
+    def rewrite(self, name, fn):
+        out = self.tmp / ("t_%s.zip" % abs(hash(name)))
+        with zipfile.ZipFile(self.zip) as a, zipfile.ZipFile(out, "w") as b:
+            for i in a.infolist():
+                data = a.read(i.filename)
+                b.writestr(i, fn(data) if i.filename == name else data)
+        return out
+
+    def test_replay_regenerates_every_work_with_the_bundled_code(self):
+        self.assertTrue(self.r["ok"], self.r)
+        r = PV.replay(self.zip)
+        print("\nBUNDLE %d files, %d bytes; replay %s" % (self.r["files"], self.r["bytes"], r["works"]), file=sys.stderr)
+        self.assertTrue(r["ok"], r)
+        self.assertEqual([w["identical"] for w in r["works"]], [True, True, True])
+        self.assertTrue(r["engine"].startswith(r["dir"]))                          # ran from inside the bundle, not this repo
+        m = json.loads(zipfile.ZipFile(self.zip).read("MANIFEST.json"))
+        self.assertEqual(sorted(m["plugins"]), ["image_svg", "plotter", "sound_synth"])
+        self.assertEqual(m["format"], "bundle/1")
+        names = zipfile.ZipFile(self.zip).namelist()
+        for must in ("index.html", "replay.py", "LICENSES.md", "work/world.json", "engine/vendor/three/LICENSE", "kinematics/kinematics.py"):
+            self.assertIn(must, names)
+        self.assertFalse(any("tests/" in n or "__pycache__" in n for n in names))
+
+    def test_a_changed_file_is_found(self):
+        r = PV.replay(self.rewrite("work/works/1_image_svg.svg", lambda b: b.replace(b"<svg", b"<svg data-x='1'", 1)))
+        self.assertFalse(r["ok"]); self.assertEqual(r["integrity"]["changed"], ["work/works/1_image_svg.svg"])
+
+    def test_the_bundled_plugin_is_what_runs(self):
+        r = PV.replay(self.rewrite("engine/plugins/sound_synth/plugin.py", lambda b: b.replace(b"* 104729", b"* 104723", 1)))
+        self.assertFalse(r["ok"])
+        self.assertEqual([w["identical"] for w in r["works"]], [True, True, False])  # the edited copy made a different sound
+
+    def test_paths_outside_the_bundle_are_refused(self):
+        bad = self.tmp / "bad.zip"
+        with zipfile.ZipFile(bad, "w") as z:
+            z.writestr("../escape.txt", "x")
+        self.assertFalse(PV.replay(bad)["ok"])
+
+    @unittest.skipUnless(headless.available()[0], "no browser")
+    def test_the_bundled_runtime_opens_the_work(self):
+        d = self.tmp / "open"
+        with zipfile.ZipFile(self.zip) as z:
+            z.extractall(d)
+        r = headless._shoot(d, "engine/runtime/index.html?world=../../work/world.json&works=../../work/works.json&headless=1&w=480&h=300", d / "s.png", 480, 300, 120)
+        self.assertTrue(r["ok"], r.get("reason"))
+
+
+class LicenseTableTests(unittest.TestCase):
+    def test_facts_from_the_repository(self):
+        rows = {r["component"]: r for r in LC.table()}
+        three = rows["three.js r170 (vendor/three)"]
+        self.assertEqual((three["license"], three["commercial"], three["shipped"]), ("MIT", "가능", True))
+        core = next(r for k, r in rows.items() if k.startswith("worldengine core"))
+        if not (REPO / "LICENSE").exists():
+            self.assertEqual(core["license"], "없음 — 저장소 주인이 정할 일")           # not invented
+        model = next(r for k, r in rows.items() if r["kind"].startswith("AI model"))
+        from worldengine.studio import config
+        self.assertIn(config.model(), model["component"]); self.assertEqual(model["commercial"], "확인 필요")
+        self.assertTrue(all(r["notes"] == "AI 모델 없음 (절차적)" for k, r in rows.items() if k.startswith("plugin ")))
+
+    def test_a_plugin_that_uses_a_model_says_so(self):
+        r = LC.plugin_row("x", {"version": "1", "medium": "image", "uses_model": {"provider": "P", "model": "m-1", "terms": "P terms"}})
+        self.assertIn("m-1", r["notes"])
+        self.assertIn("확인 필요", LC.plugin_row("y", {"version": "1", "medium": "image"})["notes"])   # undeclared is not 'none'
+
+    def test_published_site_and_bundle_carry_it(self):
+        from worldengine import site
+        with tempfile.TemporaryDirectory() as d:
+            site.build(Path(d) / "s", world_files=[ENGINE / "worlds" / "ref_yeobaek.world.json"])
+            md = (Path(d) / "s" / "LICENSES.md").read_text(encoding="utf-8")
+        self.assertIn("three.js r170", md); self.assertIn("plugin sound_synth", md)
+        self.assertNotIn("스튜디오 대화 조수", md)                                   # a work's table lists what it contains
 
 
 if __name__ == "__main__":
