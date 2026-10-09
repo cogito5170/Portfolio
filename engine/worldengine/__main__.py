@@ -94,6 +94,8 @@ def main(argv=None) -> int:
     a = sub.add_parser("exhibit"); a.add_argument("--world", required=True); a.add_argument("--host", default="127.0.0.1"); a.add_argument("--port", type=int, default=8200)
     a.add_argument("--no-presence", action="store_true")
     a = sub.add_parser("gltf"); a.add_argument("world"); a.add_argument("--out", required=True)
+    a = sub.add_parser("tour-video"); a.add_argument("world"); a.add_argument("--out", required=True); a.add_argument("--tour")
+    a.add_argument("--w", type=int, default=1280); a.add_argument("--h", type=int, default=720); a.add_argument("--fps", type=int, default=24)
     a = sub.add_parser("urdf"); a.add_argument("world"); a.add_argument("--out", required=True); a.add_argument("--id")
     a = sub.add_parser("v12"); a.add_argument("--yes", action="store_true")
     a = sub.add_parser("sandbox-probe")
@@ -129,6 +131,11 @@ def main(argv=None) -> int:
         from worldengine import exhibit, world as WD
         exhibit.serve(WD.load(a.world), a.host, a.port, presence=not a.no_presence)
         return 0
+    if a.cmd == "tour-video":
+        from worldengine import video
+        r = video.tour_video(a.world, a.out, a.tour, a.w, a.h, a.fps)
+        print(json.dumps({k: v for k, v in r.items() if k != "captions"}, ensure_ascii=False))
+        return 0 if r["ok"] else 1
     if a.cmd == "urdf":
         from worldengine import robot as RB, world as WD
         arms = [e for e in WD.load(a.world).get("entities") or [] if e.get("type") == "robot.arm" and (a.id is None or e.get("id") == a.id)]

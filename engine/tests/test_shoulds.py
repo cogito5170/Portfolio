@@ -18,7 +18,9 @@ ENGINE = Path(__file__).resolve().parent.parent
 REPO = ENGINE.parent
 sys.path.insert(0, str(ENGINE))
 
-from worldengine import footprint as FP, robot as RB, world as WD  # noqa: E402
+import shutil  # noqa: E402
+
+from worldengine import footprint as FP, headless, robot as RB, video as VD, world as WD  # noqa: E402
 from worldengine.studio import diff as DF  # noqa: E402
 
 URDFS = ["planar_3_dof", "arm_6_dof", "planar_arm_with_fixed", "planar_3_dof_diff_links"]
@@ -92,6 +94,32 @@ class FloorPlanTests(unittest.TestCase):
         self.assertTrue(any(l.startswith("몸이 덮은 바닥") for l in lines), lines)
         c = copy.deepcopy(a); c["rules"]["axes"]["density"] = 0.9
         self.assertFalse(any(l.startswith("몸이 덮은 바닥") for l in DF.summary_ko(DF.diff(a, c))))   # axes only: no area line
+
+
+class TourVideoTests(unittest.TestCase):
+    def test_srt_times(self):
+        caps = [{"t": 1.0, "text": "가", "seconds": 3}, {"t": 2.5, "text": "나", "seconds": 4}, {"t": 9.0, "text": "다", "seconds": 4}]
+        self.assertEqual(VD.srt(caps, 10.0), "1\n00:00:01,000 --> 00:00:02,500\n가\n\n2\n00:00:02,500 --> 00:00:06,500\n나\n\n"
+                                               "3\n00:00:09,000 --> 00:00:10,000\n다\n")
+
+    @unittest.skipUnless(headless.available()[0] and shutil.which("ffmpeg") and shutil.which("ffprobe"), "needs a browser and ffmpeg/ffprobe")
+    def test_tour_video_has_every_frame_and_the_captions(self):
+        w = WD.load(ENGINE / "worlds" / "talking_garden.world.json")
+        with tempfile.TemporaryDirectory() as d:
+            r = VD.tour_video(w, Path(d) / "t.mp4", w=320, h=180, fps=8)
+            self.assertTrue(r["ok"], r.get("reason"))
+            pr = VD.probe(r["mp4"])
+            sub = Path(r["srt"]).read_text(encoding="utf-8")
+        print("\nTOUR VIDEO %d frames, %.1f s, %s, %d captions" % (r["frames"], r["seconds"], r["encoder"], len(r["captions"])), file=sys.stderr)
+        v = next(x for x in pr["streams"] if x["codec_type"] == "video")
+        self.assertEqual((v["width"], v["height"], int(v["nb_frames"])), (320, 180, r["frames"]))
+        self.assertTrue(any(x["codec_type"] == "subtitle" for x in pr["streams"]))
+        stops = [st["caption"] for st in w["tours"][0]["stops"]]
+        self.assertEqual([c["text"] for c in r["captions"]], stops)                  # every stop's caption, in order
+        for c in stops:
+            self.assertIn(c, sub)
+        self.assertTrue(r["ended"])
+        self.assertAlmostEqual(float(pr["format"]["duration"]), r["seconds"], delta=0.2)
 
 
 if __name__ == "__main__":
