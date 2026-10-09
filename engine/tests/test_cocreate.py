@@ -333,29 +333,40 @@ class StudioRouteTests(unittest.TestCase):
         self.assertEqual([p["kind"] for p in st["proposals"]], ["cocreate"])
         self.assertEqual(self.call("/api/cocreate/zzz/events")[0], 404)
 
-    def test_page_drives_itself_at_phone_width(self):
+    def drive_page(self, w, h):
         ok, why = headless.available()
         if not ok:
             self.skipTest(why)
         url = self.base + "/cocreate?t=%s&selftest=1&choose=audience" % self.st.token
-        r = headless.run_live(url, 90, 390, 800)
+        r = headless.run_live(url, 90, w, h)
         self.assertTrue(r["ok"], r.get("reason"))
-        res = r["result"]
+        return r["result"]
+
+    def test_page_drives_itself(self):
+        """The artist's whole path on the page, at a PC width: brief edit -> rebuttals -> choice outside the shortlist -> plan."""
+        res = self.drive_page(1280, 800)
         self.assertEqual(res["stage"], "done")
         self.assertEqual(len(res["cards"]), 4)
         self.assertEqual(res["departures"], 4)
         self.assertEqual(res["rebuttals"], 12)
         self.assertIn("lane-audience", res["bad"])
         self.assertEqual(res["picks"], ["lane-emotion", "lane-form"])
-        self.assertTrue(all(w > 0 for w in res["plans"]), res["plans"])
+        self.assertTrue(all(n > 0 for n in res["plans"]), res["plans"])
         self.assertLessEqual(res["width"]["scroll"], res["width"]["inner"])
-        self.assertLessEqual(res["width_done"]["scroll"], res["width_done"]["inner"])
         self.assertIn("확인 필요", res["plan"])
         self.assertEqual((res["chosen"], res["buttons_left"]), ("작가가 고름 (추천 밖)", 0))
         self.assertEqual(res["replay"], res["after"])
         edited = self.st.runs[next(iter(self.st.runs))].state["brief"]
         self.assertIn("작가가 더한 탐구", edited["exploration"])
 
+    def test_page_at_phone_width(self):
+        res = self.drive_page(390, 800)
+        got = res["width"]["inner"]
+        if got != 390:          # full Chromium (not the headless shell) cannot make a window narrower than 500 px
+            self.skipTest("this browser's window cannot be 390 px wide (got %d px) -- phone layout NOT measured here" % got)
+        self.assertEqual(res["stage"], "done")
+        self.assertLessEqual(res["width"]["scroll"], 390)
+        self.assertLessEqual(res["width_done"]["scroll"], 390)
 
 if __name__ == "__main__":
     unittest.main()

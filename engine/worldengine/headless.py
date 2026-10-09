@@ -203,7 +203,15 @@ def tour_frames(world, frames_dir, tour: "str | None" = None, w: int = 1280, h: 
                 self.send_response(204); self.end_headers()
         q = "runtime/index.html?world=/world.json&w=%d&h=%d&headless=1&selftest=tourvideo&fps=%d&max_s=%g%s" % (
             w, h, fps, max_s, ("&tour=" + quote(tour, safe="")) if tour else "")
-        return _shoot(tmp, q, frames_dir / "_last.png", w, h, timeout_s, handler=functools.partial(H, directory=str(tmp)))
+        # Wall clock, not virtual time: the page steps world time itself (1/fps per frame), and under
+        # --virtual-time-budget the browser quit when the budget ran out, whether or not the page had finished
+        # (measured on full Chromium 1194: 2 of 6 runs ended at rc=0 after 59 and 120 of 120 frames, no report).
+        with http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(H, directory=str(tmp))) as srv:
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            try:
+                return run_live("http://127.0.0.1:%d/%s" % (srv.server_address[1], q), timeout_s, w, h)
+            finally:
+                srv.shutdown()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

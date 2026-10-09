@@ -196,7 +196,8 @@ if (new URLSearchParams(location.search).get('selftest')) (async () => {
     r.bad = [...document.querySelectorAll('.tag.bad')].map(x => x.closest('.lane').id);
     r.judged = [...document.querySelectorAll('.tag.warn')].map(x => x.closest('.lane') && x.closest('.lane').id);
     r.picks = [...document.querySelectorAll('.tag.pick')].map(x => x.closest('.lane').id);
-    r.plans = await Promise.all([...document.querySelectorAll('.lane img')].map(i => new Promise(ok => i.complete ? ok(i.naturalWidth) : (i.onload = () => ok(i.naturalWidth), i.onerror = () => ok(0)))));
+    // the plan images load lazily (only when scrolled into view), so fetch what each one points at instead of waiting for it
+    r.plans = await Promise.all([...document.querySelectorAll('.lane img')].map(i => fetch(i.src).then(x => x.ok ? x.text() : '').then(t => t.startsWith('<svg') ? t.length : 0, () => 0)));
     r.width = { scroll: document.scrollingElement.scrollWidth, inner: innerWidth };
     const target = new URLSearchParams(location.search).get('choose') || 'audience';
     document.querySelector('#lane-' + target + ' .pickbox button').click();
