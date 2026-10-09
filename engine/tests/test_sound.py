@@ -64,5 +64,34 @@ class SoundPluginTests(unittest.TestCase):
         self.assertIn("160 bpm", b)
 
 
+class SoundMeasureTests(unittest.TestCase):
+    """V-04 on sound, first measurement (no target yet): measured by worldengine/measure_audio.py, which reads the WAV
+    only. The numbers are recorded in the README, including where the method fails."""
+    def test_each_world_sounds_nearest_to_itself(self):
+        from worldengine import measure_audio as MA
+        P = PL.discover()["sound_synth"]
+        rows = MA.distinctness([{"world": n, "wav": PL.generate(P, w)["artifact"]} for n, w in REF.items()], REF)
+        for r in rows:
+            print("\nSOUND %s measured %s nearest %s" % (r["world"], {k: round(v, 2) if isinstance(v, float) else v for k, v in r["measured"].items()}, r["nearest"]), file=sys.stderr)
+        self.assertEqual([r["own_rank"] for r in rows], [1, 1, 1])
+        by = {r["world"]: r["measured"] for r in rows}
+        self.assertAlmostEqual(by["ref_modulor"]["tempo_bpm"], 80, delta=8)              # tempo heard where notes are dense enough
+        self.assertAlmostEqual(by["ref_festival_baroque"]["tempo_bpm"], 145, delta=15)
+
+    def test_measurer_on_known_signals(self):
+        from worldengine import measure_audio as MA
+        import math, struct
+        def wav(fn, sec=4.0, sr=16000):
+            b = io.BytesIO(); f = wave.open(b, "wb"); f.setnchannels(1); f.setsampwidth(2); f.setframerate(sr)
+            f.writeframes(struct.pack("<%dh" % int(sec * sr), *(int(32767 * max(-1, min(1, fn(i / sr)))) for i in range(int(sec * sr))))); f.close()
+            return b.getvalue()
+        silent = MA.axes(wav(lambda t: 0.0))
+        self.assertEqual((silent["sound"], silent["onsets"]), (0.0, 0))
+        clicks = MA.axes(wav(lambda t: 0.8 * math.sin(2 * math.pi * 440 * t) if (t % 0.25) < 0.05 else 0.0))   # 8th notes at 120 bpm
+        self.assertAlmostEqual(clicks["tempo_bpm"], 120.0, delta=3)                     # 20 ms frames: a few bpm
+        self.assertGreater(clicks["density"], 0.9)                                       # 8 a second (the first, at 0 s, has no frame before it)
+        self.assertGreater(MA.axes(wav(lambda t: 0.5 * math.sin(2 * math.pi * 3000 * t)))["colour"], MA.axes(wav(lambda t: 0.5 * math.sin(2 * math.pi * 200 * t)))["colour"])
+
+
 if __name__ == "__main__":
     unittest.main()

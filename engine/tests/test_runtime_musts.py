@@ -169,7 +169,8 @@ class ExhibitTests(unittest.TestCase):
         base = "http://127.0.0.1:%d" % srv.server_address[1]
         try:
             idx = json.loads(urllib.request.urlopen(base + "/works.json").read())
-            self.assertEqual([i["title"] for i in idx["items"]], ["그림", "로봇이 그린 그림"])
+            self.assertEqual([i["title"] for i in idx["items"]], ["그림", "로봇이 그린 그림", "소리"])
+            self.assertEqual(urllib.request.urlopen(base + idx["items"][2]["src"]).read()[:4], b"RIFF")
             self.assertTrue(urllib.request.urlopen(base + idx["items"][0]["src"]).read().startswith(b"<svg"))
             for path in ("/api/asset/box.glb", "/assets/box.glb", "/api/assets"):
                 with self.assertRaises(urllib.error.HTTPError) as cm:
@@ -181,7 +182,7 @@ class ExhibitTests(unittest.TestCase):
     def test_works_refused_by_the_rules_are_listed_with_the_reason(self):
         w = copy.deepcopy(YEOBAEK); w["forbidden"] = [{"kind": "word", "value": "polyline"}]
         items = WK.render(w)
-        self.assertEqual([i["ok"] for i in items], [True, False])
+        self.assertEqual([i["ok"] for i in items], [True, False, True])           # the sound is not text: not inspected
         self.assertIn("세계 규칙", items[1]["reason"])
         self.assertNotIn("src", WK.index(items, lambda it: "x")["items"][1])
 
@@ -236,7 +237,7 @@ class RuntimeMustsBrowserTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             src = Path(d) / "yeobaek_tour.world.json"; src.write_text(json.dumps(w, ensure_ascii=False), encoding="utf-8")
             out = Path(d) / "site"; b = site.build(out, world_files=[src])
-            self.assertEqual(sorted(p.name for p in (out / "works" / "yeobaek_tour").iterdir()), ["1_image_svg.svg", "2_plotter.svg"])
+            self.assertEqual(sorted(p.name for p in (out / "works" / "yeobaek_tour").iterdir()), ["1_image_svg.svg", "2_plotter.svg", "3_sound_synth.wav"])
             handler = __import__("functools").partial(headless._Quiet, directory=str(out))
             with headless.http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as srv:
                 threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -245,7 +246,8 @@ class RuntimeMustsBrowserTests(unittest.TestCase):
         self.assertTrue(r["ok"], r.get("reason"))
         res = r["result"]
         print("\nPLAYER %s" % json.dumps({k: res[k] for k in ("attract_after_s", "attract_loops", "fullscreen", "wake")}, ensure_ascii=False), file=sys.stderr)
-        self.assertEqual([(i["ok"], i["w"] > 0) for i in res["items"]], [(True, True), (True, True)])
+        self.assertEqual([(i["ok"], i["w"] > 0) for i in res["items"][:2]], [(True, True), (True, True)])
+        self.assertEqual((res["items"][2]["title"], res["items"][2]["seconds"]), ("소리", 11.08))     # the sound work: playable, 11.08 s
         self.assertLessEqual(res["attract_after_s"], 5.5)                          # idle 5 s (test setting) -> the tour
         self.assertTrue(res["touring"]); self.assertGreaterEqual(res["attract_loops"], 2); self.assertTrue(res["cursor_hidden"])
         self.assertEqual(res["after_touch"], {"attract": False, "touring": False, "orbit": True})
