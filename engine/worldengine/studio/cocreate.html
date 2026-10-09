@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>공동 창작</title>
+<style>
+:root{--bg:#f4f1ea;--ink:#1f2328;--sub:#5b616b;--card:#fff;--line:#e3dfd6;--accent:#1b6ef3;--warn:#b54708;--bad:#b42318;--mark:#fff4d6}
+@media (prefers-color-scheme:dark){:root{--bg:#15171b;--ink:#e8e6e1;--sub:#a3a8b0;--card:#1e2126;--line:#2c3036;--accent:#7aa7ff;--warn:#f79009;--bad:#f97066;--mark:#3a3220}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 "Noto Sans KR",system-ui,sans-serif}
+main{max-width:1180px;margin:0 auto;padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
+h1{font-size:20px;margin:4px 0 2px}h2{font-size:16px;margin:22px 0 8px}.sub{color:var(--sub);font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin:8px 0;min-width:0}
+.lanes{display:grid;grid-template-columns:1fr;gap:10px}@media (min-width:760px){.lanes{grid-template-columns:1fr 1fr}}@media (min-width:1100px){.lanes{grid-template-columns:repeat(4,1fr)}}
+.lane h3{margin:0 0 2px;font-size:15px}.st{font-size:12px;color:var(--sub)}.think::after{content:" …";animation:b 1.2s infinite}@keyframes b{50%{opacity:.2}}
+.lane h4{margin:6px 0 4px;font-size:15px}.lane img{width:100%;height:auto;background:#fbfaf7;border-radius:8px;border:1px solid var(--line)}
+ul{margin:4px 0 6px 18px;padding:0}.dep{background:var(--mark);border-radius:8px;padding:6px 8px;margin:6px 0;font-size:13px}
+.tag{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:0 8px;margin:2px 2px 0 0}
+.bad{color:var(--bad);border-color:var(--bad)}.warn{color:var(--warn);border-color:var(--warn)}.pick{color:var(--accent);border-color:var(--accent)}
+.reb{font-size:13px;border-left:3px solid var(--line);padding-left:8px;margin:4px 0}
+button,a.btn{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;margin:4px 4px 0 0;text-decoration:none}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}button:disabled{opacity:.5}
+textarea,input,select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px;width:100%;min-height:44px}
+label{display:block;font-size:13px;color:var(--sub);margin-top:8px}.row{display:grid;grid-template-columns:1fr;gap:6px}@media (min-width:640px){.row{grid-template-columns:2fr 1fr 1fr 1fr}}
+pre{white-space:pre-wrap;font-size:13px;overflow-wrap:anywhere}#err{color:var(--bad)}
+</style></head><body><main>
+<h1>공동 창작</h1>
+<p class="sub">네 렌즈(감정 · 형태·재료 · 발상 전환 · 관객)가 서로 보지 않고 아이디어를 내고, 그다음 서로 반박합니다. 큐레이터는 근거만 쓰고, 고르는 것은 작가입니다. <a id="back">스튜디오로</a></p>
+<div id="err" role="alert"></div>
+<section id="ask" class="card"><label for="said">무엇을 만들고 싶어요?</label>
+<textarea id="said" rows="3" placeholder="예: 외로움을 표현하고 싶어. 하지만 슬픈 사람을 직접 그리지는 않았으면 좋겠어."></textarea>
+<button class="primary" id="go">시작</button> <span class="sub" id="prov"></span></section>
+<section id="briefbox" hidden></section>
+<h2 id="lanesh" hidden>렌즈</h2><div class="lanes" id="lanes"></div>
+<section id="cur" hidden></section>
+<section id="done" hidden></section>
+<p class="sub" id="usage"></p>
+</main>
+<script>
+const T = new URLSearchParams(location.search).get('t') || '';
+const q = p => p + (p.includes('?') ? '&' : '?') + 't=' + encodeURIComponent(T);
+const api = (p, body) => fetch(q('/api/' + p), body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {})
+  .then(async r => { const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.status); return j; });
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const LENS = ['emotion', 'form', 'invert', 'audience'], KO = { emotion: '감정', form: '형태·재료', invert: '발상 전환', audience: '관객' };
+const RK = { cliche: '진부함', breaks_brief: '명세 위반', not_feasible: '만들 수 없음', weak_effect: '효과가 약함', contradiction: '내적 모순', other: '기타' };
+$('back').href = '/?t=' + encodeURIComponent(T);
+let run = (location.hash.match(/run=([\w-]+)/) || [])[1], after = 0, stage = '', cards = {}, short = [], usage = { i: 0, o: 0 };
+const fail = e => { $('err').textContent = String(e.message || e); };
+
+$('go').onclick = async () => {
+  $('err').textContent = ''; const text = $('said').value.trim(); if (!text) return;
+  try { $('go').disabled = true; const r = await api('cocreate', { text }); run = r.run; location.hash = 'run=' + run;
+    $('prov').textContent = '모델: ' + Object.entries(r.providers).map(([k, v]) => k + ' ' + v).join(' · ') + (r.note ? ' (' + r.note + ')' : ''); poll();
+  } catch (e) { $('go').disabled = false; fail(e); }
+};
+
+function lane(id) {
+  let c = $('lane-' + id); if (c) return c;
+  $('lanesh').hidden = false; c = el('div', 'card lane'); c.id = 'lane-' + id;
+  c.appendChild(el('h3', '', KO[id])); c.appendChild(el('div', 'st', '')); c.appendChild(el('div', 'body')); c.appendChild(el('div', 'meas'));
+  c.appendChild(el('div', 'got')); c.appendChild(el('div', 'pickbox'));
+  const order = LENS.indexOf(id), box = $('lanes'); const next = [...box.children].find(x => LENS.indexOf(x.id.slice(5)) > order);
+  box.insertBefore(c, next || null); return c;
+}
+const status = (id, text, thinking) => { const s = lane(id).querySelector('.st'); s.textContent = text; s.classList.toggle('think', !!thinking); };
+
+function showCard(c) {
+  cards[c.id] = c; const b = lane(c.id).querySelector('.body'); b.textContent = '';
+  status(c.id, '아이디어 도착 · ' + c.provider + ' ' + c.model);
+  b.appendChild(el('h4', '', c.title)); b.appendChild(el('div', '', c.premise));
+  if (c.departures.length) { const d = el('div', 'dep'); d.appendChild(el('b', '', '작가가 말하지 않은 것 (이 렌즈가 더함)')); const u = el('ul'); c.departures.forEach(x => u.appendChild(el('li', '', x))); d.appendChild(u); b.appendChild(d); }
+  b.appendChild(el('div', 'sub', '관객: ' + c.audience_experience)); b.appendChild(el('div', 'sub', c.lens_note));
+  if (c.sketch.needs.length) b.appendChild(el('div', 'tag warn', '엔진에 없음: ' + c.sketch.needs.join(', ')));
+  const img = el('img'); img.alt = c.title + ' 평면도 (스케치)'; img.loading = 'lazy'; img.src = q('/api/cocreate/' + run + '/plan/' + c.id + '.svg'); b.appendChild(img);
+  const a = el('a', 'btn', '3D로 보기'); a.target = '_blank'; a.href = '/runtime/index.html?world=' + encodeURIComponent(q('/api/cocreate/' + run + '/sketch/' + c.id + '.json')); b.appendChild(a);
+}
+
+function showRebuttals(by, list) {
+  status(by, '반박 끝');
+  for (const r of list) { const g = lane(r.target).querySelector('.got'); if (!g.firstChild) g.appendChild(el('b', 'sub', '받은 반박'));
+    const d = el('div', 'reb'); d.appendChild(el('span', 'tag', KO[r.by] + ' · ' + (RK[r.kind] || r.kind))); d.appendChild(document.createTextNode(' ' + r.point)); g.appendChild(d); }
+}
+
+function showMeasured(m) {
+  for (const [id, x] of Object.entries(m.ideas)) { const box = lane(id).querySelector('.meas'); box.textContent = '';
+    x.machine_forbidden.forEach(v => box.appendChild(el('span', 'tag bad', '금지 조건 위반: ' + v.entity + ' ' + v.value)));
+    x.judged_flags.forEach(f => box.appendChild(el('span', 'tag warn', '판단 필요: ' + f.constraint + ' (' + [...f.types, ...f.words].join(', ') + ')')));
+    if (x.echo.length) box.appendChild(el('span', 'tag', '명세 단어 그대로: ' + x.echo.join(', ')));
+    if (x.world_errors.length) box.appendChild(el('span', 'tag bad', '스케치 형식 오류 ' + x.world_errors.length));
+    box.appendChild(el('span', 'tag', '덮는 바닥 ' + x.covered_m2 + ' m²')); }
+  if (m.closest_pair) $('lanes').insertAdjacentElement('afterend', Object.assign(el('p', 'sub', '가장 가까운 두 아이디어: ' + KO[m.closest_pair.a] + ' ↔ ' + KO[m.closest_pair.b] +
+    ' (축 거리 ' + m.closest_pair.axes_distance + ', 몸 종류 거리 ' + m.closest_pair.types_distance + ') — 지표일 뿐 독창성 점수가 아닙니다.'), { id: 'closest' }));
+}
+
+function showCurator(r) {
+  const c = $('cur'); c.hidden = false; c.textContent = ''; c.className = 'card'; c.appendChild(el('h2', '', '큐레이터의 근거'));
+  c.appendChild(el('p', '', r.message_to_artist)); if (r.shortlist_note) c.appendChild(el('p', 'sub', r.shortlist_note)); short = r.shortlist.map(p => p.idea);
+  const u = el('ul'); r.shortlist.forEach(p => u.appendChild(el('li', '', KO[p.idea] + ' — ' + p.reason))); c.appendChild(u);
+  if (r.collisions.length) { c.appendChild(el('b', 'sub', '겹치는 곳')); const v = el('ul'); r.collisions.forEach(x => v.appendChild(el('li', '', KO[x.a] + ' ↔ ' + KO[x.b] + ': ' + x.note))); c.appendChild(v); }
+  for (const n of r.notes) { const box = lane(n.idea).querySelector('.meas'); const d = el('div', 'reb');
+    d.appendChild(el('b', 'sub', '큐레이터: ')); d.appendChild(document.createTextNode([...n.strengths.map(x => '+ ' + x), ...n.weaknesses.map(x => '− ' + x), ...n.cliche.map(x => '흔함: ' + x)].join(' · ')));
+    box.appendChild(d); if (short.includes(n.idea)) box.prepend(el('span', 'tag pick', '추천')); }
+}
+
+function choosing() {
+  for (const id of Object.keys(cards)) { const p = lane(id).querySelector('.pickbox'); p.textContent = '';
+    const b = el('button', short.includes(id) ? 'primary' : '', '이걸로 만들기'); b.onclick = async () => {
+      try { document.querySelectorAll('.pickbox button').forEach(x => x.disabled = true); await api('cocreate/' + run + '/choose', { idea: id, note: $('note') ? $('note').value : '' }); }
+      catch (e) { fail(e); document.querySelectorAll('.pickbox button').forEach(x => x.disabled = false); } };
+    p.appendChild(b); }
+  if (!$('note')) { const c = $('cur'); c.appendChild(el('label', '', '고른 이유나 바꿀 점 (선택)')); const t = el('textarea'); t.id = 'note'; t.rows = 2; c.appendChild(t);
+    c.appendChild(el('p', 'sub', '추천에 없는 아이디어도 고를 수 있어요.')); }
+}
+
+function briefForm(b) {
+  const box = $('briefbox'); box.hidden = false; box.className = 'card'; box.textContent = '';
+  box.appendChild(el('h2', '', '이렇게 이해했어요 — 명세 확인')); box.appendChild(el('p', 'sub', '고칠 곳을 고친 뒤 진행하세요. 렌즈들은 이 명세만 봅니다.'));
+  const f = (label, val, id, rows) => { box.appendChild(el('label', '', label)); const t = el(rows ? 'textarea' : 'input'); t.id = id; t.value = val; if (rows) t.rows = rows; box.appendChild(t); };
+  f('주제', b.intent.theme, 'b-theme'); f('바라는 효과', b.intent.desired_effect, 'b-eff', 2);
+  f('탐구 방향 (쉼표로)', b.exploration.join(', '), 'b-exp'); f('정해지지 않은 것 (쉼표로)', b.uncertainties.join(', '), 'b-unc');
+  box.appendChild(el('label', '', '금지 조건 — "엔진이 막음"은 확실히 막고, "사람이 판단"은 나오면 표시만 합니다'));
+  b.constraints.forbidden.forEach((x, i) => { const r = el('div', 'row');
+    const t = el('input'); t.value = x.text; t.dataset.k = 'text'; const c = el('select'); c.dataset.k = 'check';
+    [['judged', '사람이 판단'], ['machine', '엔진이 막음']].forEach(([v, l]) => { const o = el('option', '', l); o.value = v; o.selected = x.check === v; c.appendChild(o); });
+    const k = el('select'); k.dataset.k = 'kind'; [['', '-'], ['type', '몸 종류'], ['colour', '색'], ['word', '단어']].forEach(([v, l]) => { const o = el('option', '', l); o.value = v; o.selected = (x.kind || '') === v; k.appendChild(o); });
+    const v = el('input'); v.dataset.k = 'value'; v.value = x.value || (x.flag_types || []).concat(x.flag_words || []).join(', '); v.placeholder = '값 / 표시할 것';
+    [t, c, k, v].forEach(n => r.appendChild(n)); r.dataset.i = i; box.appendChild(r); });
+  const go = el('button', 'primary', '이 명세로 진행'); box.appendChild(go);
+  go.onclick = async () => {
+    const nb = JSON.parse(JSON.stringify(b)), list = s => s.split(',').map(x => x.trim()).filter(Boolean);
+    nb.intent.theme = $('b-theme').value; nb.intent.desired_effect = $('b-eff').value; nb.exploration = list($('b-exp').value); nb.uncertainties = list($('b-unc').value);
+    nb.constraints.forbidden = [...box.querySelectorAll('.row')].map(r => { const o = JSON.parse(JSON.stringify(b.constraints.forbidden[+r.dataset.i])), g = k => r.querySelector('[data-k=' + k + ']').value.trim();
+      o.text = g('text'); o.check = g('check');
+      if (o.check === 'machine') { o.kind = g('kind') || null; o.value = g('value') || null; }
+      else { o.kind = null; o.value = null; const items = list(g('value')); o.flag_types = items.filter(x => /^[a-z.]+$/.test(x)); o.flag_words = items.filter(x => !/^[a-z.]+$/.test(x)); }
+      return o; });
+    try { go.disabled = true; $('err').textContent = ''; await api('cocreate/' + run + '/brief', { brief: nb }); } catch (e) { go.disabled = false; fail(e); }
+  };
+}
+
+function showDone(e) {
+  const d = $('done'); d.hidden = false; d.className = 'card'; d.textContent = ''; d.appendChild(el('h2', '', '작품 시안'));
+  d.appendChild(el('p', '', e.why));
+  if (e.cannot.length) { d.appendChild(el('b', 'sub', '못 한 것 (대신 한 것)')); const u = el('ul'); e.cannot.forEach(c => u.appendChild(el('li', '', c.what + ' — ' + c.why + ' → ' + c.alternative))); d.appendChild(u); }
+  e.works.forEach(w => d.appendChild(el('span', 'tag' + (w.ok ? '' : ' warn'), w.title + (w.ok ? '' : ': ' + w.reason))));
+  const a = el('a', 'btn', '3D로 보기'); a.target = '_blank'; a.href = '/runtime/index.html?world=' + encodeURIComponent(q('/api/cocreate/' + run + '/world.json')); d.appendChild(a);
+  const s = el('a', 'btn', '스튜디오에서 적용하기'); s.href = '/?t=' + encodeURIComponent(T); d.appendChild(s);
+  if (e.proposal) d.appendChild(el('p', 'sub', '스튜디오에 제안 ' + e.proposal + ' 으로 올라갔어요. 적용을 눌러야 작품이 바뀝니다.'));
+  d.appendChild(el('h2', '', '제작 지침')); d.appendChild(el('pre', '', e.plan_md));
+}
+
+function handle(e) {
+  if (e.kind === 'said') { $('said').value = e.text; $('go').disabled = true; (e.warnings || []).forEach(w => fail({ message: w.message })); }
+  else if (e.kind === 'brief') briefForm(e.brief);
+  else if (e.kind === 'brief_confirmed') { briefForm(e.brief); $('briefbox').querySelectorAll('button,input,select,textarea').forEach(x => x.disabled = true);
+    $('briefbox').querySelector('h2').textContent = '확인한 명세'; $('briefbox').querySelector('button').remove(); }
+  else if (e.kind === 'chosen') { const p = lane(e.idea).querySelector('.pickbox'); p.textContent = ''; p.appendChild(el('span', 'tag pick', '작가가 고름' + (e.in_shortlist ? '' : ' (추천 밖)')));
+    if (e.note) p.appendChild(el('div', 'sub', e.note)); document.querySelectorAll('.pickbox button').forEach(x => x.remove()); }
+  else if (e.kind === 'lane') status(e.lens, (e.round === 1 ? '1라운드: 혼자 생각' : '2라운드: 반박') + (e.status === 'thinking' ? ' 중' : e.status === 'error' ? ' 실패 — ' + e.reason : ''), e.status === 'thinking');
+  else if (e.kind === 'card') showCard(e.card);
+  else if (e.kind === 'rebuttals') showRebuttals(e.lens, e.rebuttals);
+  else if (e.kind === 'measured') showMeasured(e.measured);
+  else if (e.kind === 'curator') showCurator(e.report);
+  else if (e.kind === 'realized') showDone(e);
+  else if (e.kind === 'usage') { usage.i += e.input_tokens || 0; usage.o += e.output_tokens || 0; $('usage').textContent = '이번 실행에 쓴 토큰: 입력 ' + usage.i + ' · 출력 ' + usage.o; }
+  else if (e.kind === 'stage') { stage = e.stage;
+    if (e.stage === 'choose') choosing();
+    if (e.stage === 'realize') { document.querySelectorAll('.pickbox button').forEach(x => x.remove()); if ($('note')) $('note').disabled = true; }
+    if (e.stage === 'error') fail({ message: '멈췄어요: ' + (e.reason || '') }); }
+}
+
+async function poll() {
+  let delay = 1000;
+  while (run && stage !== 'done' && stage !== 'error') {
+    try { const r = await api('cocreate/' + run + '/events?after=' + after + '&wait=20'); delay = 1000;
+      for (const e of r.events) { after = e.seq; handle(e); } }
+    catch (e) { fail(e); if (/실행이 없다/.test(e.message)) { location.hash = ''; break; } await new Promise(f => setTimeout(f, delay)); delay = Math.min(delay * 2, 15000); }     // phone asleep, network gone: resume from `after`
+  }
+  window.__cocreateDone = stage;
+}
+if (run) { $('go').disabled = true; poll(); }
+
+// ?selftest=1 (tests only): drives the page as the artist would, at whatever width it was opened, and reports.
+if (new URLSearchParams(location.search).get('selftest')) (async () => {
+  const report = (status, r) => { console.log('WE_RESULT:' + btoa(unescape(encodeURIComponent(JSON.stringify(r))))); console.log('WE_STATUS:' + status); };
+  const until = async (f, ms = 20000) => { const t0 = Date.now(); while (!f()) { if (Date.now() - t0 > ms) throw new Error('timeout: ' + f); await new Promise(r => setTimeout(r, 50)); } };
+  try {
+    const r = {};
+    $('said').value = new URLSearchParams(location.search).get('said') || '외로움'; $('go').click();
+    await until(() => document.querySelector('#briefbox button.primary'));
+    $('b-exp').value += ', 작가가 더한 탐구'; document.querySelector('#briefbox button.primary').click();
+    await until(() => stage === 'choose');
+    r.cards = [...document.querySelectorAll('.lane h4')].map(x => x.textContent);
+    r.departures = document.querySelectorAll('.dep').length;
+    r.rebuttals = document.querySelectorAll('.got .reb').length;
+    r.bad = [...document.querySelectorAll('.tag.bad')].map(x => x.closest('.lane').id);
+    r.judged = [...document.querySelectorAll('.tag.warn')].map(x => x.closest('.lane') && x.closest('.lane').id);
+    r.picks = [...document.querySelectorAll('.tag.pick')].map(x => x.closest('.lane').id);
+    r.plans = await Promise.all([...document.querySelectorAll('.lane img')].map(i => new Promise(ok => i.complete ? ok(i.naturalWidth) : (i.onload = () => ok(i.naturalWidth), i.onerror = () => ok(0)))));
+    r.width = { scroll: document.scrollingElement.scrollWidth, inner: innerWidth };
+    const target = new URLSearchParams(location.search).get('choose') || 'audience';
+    document.querySelector('#lane-' + target + ' .pickbox button').click();
+    await until(() => stage === 'done' || stage === 'error', 30000);
+    r.chosen = (document.querySelector('#lane-' + target + ' .pickbox .tag') || {}).textContent || ''; r.buttons_left = document.querySelectorAll('.pickbox button').length;
+    r.stage = stage; r.plan = ($('done').querySelector('pre') || {}).textContent || ''; r.after = after;
+    r.replay = (await api('cocreate/' + run + '/events?after=0')).events.length;      // a page that reconnects gets everything again
+    r.width_done = { scroll: document.scrollingElement.scrollWidth, inner: innerWidth };
+    report('ok', r);
+  } catch (e) { report('err:' + e.message, {}); }
+})();
+</script></body></html>

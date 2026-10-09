@@ -53,6 +53,12 @@ def table() -> "list[dict]":
     rows.append({"component": "스튜디오 대화 조수: %s (Anthropic API)" % config.model(), "kind": "AI model (studio only)",
                  "license": "Anthropic 이용약관", "commercial": CHECK, "shipped": False,
                  "notes": "작품 파일에는 들어가지 않는다; 조수가 제안하고 작가가 적용한 변경은 판 기록에 남는다. 상업적 이용 조건은 공급자 약관을 볼 것"})
+    import os
+    rows.append({"component": "공동 창작 모델: Google Gemini API (%s)" % (os.environ.get("WE_GEMINI_MODEL") or "설정 안 됨"), "kind": "AI model (studio only)",
+                 "license": "Google 이용약관", "commercial": CHECK, "shipped": False,
+                 "notes": "렌즈·큐레이터 역할에 쓸 때만. 작품 파일에는 들어가지 않는다; 실행마다 어느 역할에 어느 모델을 썼는지 기록된다 (CC-08)"})
+    rows.append({"component": "pydantic (공동 창작 스키마)", "kind": "library (studio only)", "license": "MIT", "commercial": YES, "shipped": False,
+                 "notes": "스튜디오의 공동 창작에서만 쓴다; 공개 사이트·보존 묶음에는 들어가지 않는다"})
     rows.append({"component": "Chromium · ffmpeg", "kind": "tool (headless render, tour video)", "license": "각 도구의 라이선스", "commercial": CHECK,
                  "shipped": False, "notes": "작업 도구일 뿐 결과물에 들어가지 않는다"})
     rows.append({"component": "글꼴 (Noto Sans KR 등)", "kind": "font", "license": "보는 기기에 설치된 글꼴", "commercial": CHECK, "shipped": False,
