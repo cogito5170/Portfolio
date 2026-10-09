@@ -87,6 +87,13 @@ def build(out_dir, world_files=None, assets=None) -> dict:
             '<div class="meta">%s</div>' % html.escape(meta) if meta else "", html.escape(url + "&player=1")))
     (out / "index.html").write_text(_PAGE.replace("__CARDS__", "\n".join(cards)), encoding="utf-8")
     (out / ".nojekyll").write_text("", encoding="utf-8")       # GitHub Pages: serve files as they are
+    from worldengine import licenses as LC                       # R-03: what the published works are made of
+    rows, seen = [], set()
+    for wd in worlds:
+        for r in LC.for_world(json.loads((out / "worlds" / wd["file"]).read_text(encoding="utf-8"))):
+            if r["component"] not in seen:
+                seen.add(r["component"]); rows.append(r)
+    (out / "LICENSES.md").write_text(LC.markdown(rows, "이 사이트의 라이선스 표 (R-03)"), encoding="utf-8")
     (out / "site.json").write_text(json.dumps({"worlds": worlds}, ensure_ascii=False, indent=1), encoding="utf-8")
     return {"out": str(out), "worlds": worlds}
 
