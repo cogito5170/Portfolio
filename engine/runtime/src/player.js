@@ -1,6 +1,6 @@
 // Exhibition player (T-02): the whole work on one screen, for a gallery wall or a phone.
-//   - the world (3D, sound, interaction) plus its other media (works.json: images and drawings its plugins made),
-//     shown as a strip of thumbnails; tapping one opens it large
+//   - the world (3D, sound, interaction) plus its other media (works.json: images, drawings and sounds its plugins
+//     made), shown as a strip: tapping a picture opens it large, tapping a sound plays or pauses it
 //   - "전체 화면": the page goes fullscreen and asks the screen to stay awake (where the browser allows both)
 //   - left alone for idle_s seconds (world.player.idle_s, default 45), it plays the artist's first tour, again and
 //     again, and hides the pointer; any touch, click or key hands control back to the visitor at once
@@ -35,13 +35,24 @@ class Player {
     const data = await fetch(base).then(r => r.json()).catch(() => ({ items: [] }));
     for (const it of data.items || []) {
       if (!it.src) { this.items.push({ ...it, ok: false }); continue; }       // refused by the world's rules: listed, not shown
-      const src = new URL(it.src, base).href, b = document.createElement('button'), img = document.createElement('img');
+      const src = new URL(it.src, base).href;
+      if (/^audio\//.test(it.media_type || '')) { this.items.push({ ...it, ok: true, audio: this._sound(src, it.title) }); continue; }
+      const b = document.createElement('button'), img = document.createElement('img');
       b.className = 'thumb'; b.title = it.title; b.setAttribute('aria-label', it.title + ' 크게 보기'); img.alt = it.title; img.src = src;
       b.appendChild(img); b.onclick = () => this.show(src, it.title); this.strip.appendChild(b);
       this.items.push({ ...it, ok: true, img });
     }
-    await Promise.all(this.items.filter(i => i.img).map(i => i.img.decode().catch(() => {})));
+    await Promise.all([...this.items.filter(i => i.img).map(i => i.img.decode().catch(() => {})),
+      ...this.items.filter(i => i.audio).map(i => i.audio.readyState >= 1 ? null : new Promise(r => { i.audio.onloadedmetadata = i.audio.onerror = r; setTimeout(r, 5000); }))]);
     return this.items;
+  }
+
+  _sound(src, title) {             // a sound work: one button, play / pause; it plays only after the visitor's tap
+    const a = new Audio(); a.preload = 'metadata'; a.src = src; a.loop = true;
+    const b = document.createElement('button'); b.textContent = '♪ ' + title; b.setAttribute('aria-label', title + ' 듣기');
+    b.onclick = () => { if (a.paused) { a.play().catch(() => {}); this.eng.caption('♪ ' + title); } else a.pause(); };
+    a.onplay = () => b.setAttribute('aria-pressed', 'true'); a.onpause = () => b.setAttribute('aria-pressed', 'false');
+    this.strip.appendChild(b); return a;
   }
 
   show(src, title) {

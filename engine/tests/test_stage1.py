@@ -121,7 +121,7 @@ class PluginTests(unittest.TestCase):
         rows = []
         for p in PL.discover().values():
             rows += CF.run(p, self.worlds)
-        self.assertEqual(len(rows), 2 * 3 * 6)
+        self.assertEqual(len(rows), len(PL.discover()) * 3 * 6)
         self.assertEqual([r for r in rows if not r["ok"]], [])
 
     def test_v02_new_plugin_needs_no_core_change(self):
@@ -182,7 +182,8 @@ class MeasureTests(unittest.TestCase):
     def test_v04_first_measurement_is_reported(self):
         """No target yet (SPEC: 측정 후 목표 설정). The test pins the method's output shape, not a pass threshold."""
         worlds = {n: WD.load(ENGINE / "worlds" / (n + ".world.json")) for n in REF}
-        res = [{"plugin": pn, "world": n, "svg": PL.generate(p, w)["artifact"]} for pn, p in PL.discover().items() for n, w in worlds.items()]
+        res = [{"plugin": pn, "world": n, "svg": PL.generate(p, w)["artifact"]} for pn, p in PL.discover().items()
+               if p["medium"] in ("image", "drawing") for n, w in worlds.items()]                # the SVG measurer reads pictures
         rows = MS.distinctness(res, worlds)
         self.assertEqual(len(rows), 6)
         for r in rows:

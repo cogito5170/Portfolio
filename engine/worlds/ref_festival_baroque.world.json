@@ -63,6 +63,10 @@
   {
    "medium": "drawing",
    "plugin": "plotter"
+  },
+  {
+   "medium": "sound",
+   "plugin": "sound_synth"
   }
  ],
  "environment": {

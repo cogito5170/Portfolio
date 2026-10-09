@@ -186,7 +186,7 @@ export const selftests = {
     const { player } = await import('./player.js');
     const P = new URLSearchParams(location.search), pl = player(eng, { works: P.get('works'), idle_s: 5 });
     await pl.ready;
-    const out = { items: pl.items.map(i => ({ title: i.title, ok: i.ok, w: i.img ? i.img.naturalWidth : 0, reason: i.reason || null })) };
+    const out = { items: pl.items.map(i => ({ title: i.title, ok: i.ok, w: i.img ? i.img.naturalWidth : 0, seconds: i.audio ? +i.audio.duration.toFixed(2) : null, reason: i.reason || null })) };
     const t0 = eng.realTime; while (!pl.attract && eng.realTime - t0 < 30) eng.step(0.25, false);
     out.attract_after_s = +(eng.realTime - t0).toFixed(2); out.touring = !!eng.tour;
     const t1 = eng.realTime; while (pl.attracts < 2 && eng.realTime - t1 < 600) eng.step(0.25, false);
