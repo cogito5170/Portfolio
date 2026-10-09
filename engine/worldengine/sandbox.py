@@ -51,7 +51,16 @@ def _tools():
 
 
 def _procs_of(uid) -> int:
-    return sum(1 for d in Path("/proc").iterdir() if d.name.isdigit() and _uid_of(d) == uid)
+    """Tasks (threads) the uid already runs: RLIMIT_NPROC counts threads, not processes (a multi-threaded CI agent
+    alone can exceed a small quota)."""
+    n = 0
+    for d in Path("/proc").iterdir():
+        if d.name.isdigit() and _uid_of(d) == uid:
+            try:
+                n += next(int(l.split()[1]) for l in (d / "status").read_text().splitlines() if l.startswith("Threads:"))
+            except (OSError, StopIteration, ValueError):
+                n += 1
+    return n
 
 
 def _drop(lim, address_mb=None):
