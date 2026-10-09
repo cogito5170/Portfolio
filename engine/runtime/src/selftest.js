@@ -115,4 +115,26 @@ export const selftests = {
     eng.setEye('child'); eng.step(1 / 60, false); const child = count();
     return { total: eng.eyeOnly.length, adult, child };
   },
+  // XR-10: export the built scene to .glb; Python validates the bytes independently.
+  async gltf(eng) {
+    const { exportGLB } = await import('./export.js');
+    const buf = new Uint8Array(await exportGLB(eng));
+    let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    let meshes = 0; eng.scene.traverse(o => { if (o.isMesh && o.visible) meshes++; });
+    return { bytes: buf.length, scene_meshes: meshes, glb_b64: btoa(bin) };
+  },
+  // XR-09: wait (real time) until another visitor's avatar appears, then report what this page sees.
+  async presence(eng) {
+    const p = eng.presence; if (!p) return { error: 'no ?presence' };
+    const t0 = performance.now();
+    while (performance.now() - t0 < 8000 && !(p.connected && p.avatars.size > 0)) await new Promise(r => setTimeout(r, 100));
+    let inRoot = 0; eng.root.traverse(o => { if (o.userData.presence) inRoot++; });
+    return { connected: p.connected, my_id: p.id, count: p.count, avatars: p.avatars.size, avatar_ids: [...p.avatars.keys()], in_scene: inRoot, received: p.received };
+  },
+  // XR-08 smoke: the VR module loads, support is reported honestly, and without VR nothing is added.
+  async xr(eng) {
+    const { xrSupport, enableXR } = await import('./xr.js');
+    const s = await xrSupport(); const e = await enableXR(eng);
+    return { api: s.api, vr: s.vr, button: !!eng.xrButton, renderer_xr: eng.renderer.xr.enabled, agree: s.vr === e.vr };
+  },
 };

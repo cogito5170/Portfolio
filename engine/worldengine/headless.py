@@ -139,6 +139,18 @@ def render_world(world, png_path, view: str = "aerial", w: int = 1280, h: int = 
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def render_url(url: str, png_path, w: int = 640, h: int = 400, timeout_s: float = 120, real_time_s: "float | None" = None) -> dict:
+    """A page already served elsewhere (e.g. the exhibit server), same honesty rules and self-test results.
+    real_time_s: let the page run on the wall clock for that long instead of Chromium's virtual time (needed when
+    the page waits for real network messages, e.g. WebSocket presence -- virtual time would skip the wait)."""
+    ok, why = available()
+    if not ok:
+        return {"ok": False, "backend": "없음", "reason": why}
+    if _has_playwright():
+        return _render_playwright(url, png_path, w, h, timeout_s)
+    return _render_cli(url, png_path, w, h, timeout_s, real_time_s)
+
+
 def _shoot(root: Path, rel_url: str, png_path, w, h, timeout_s) -> dict:
     handler = functools.partial(_Quiet, directory=str(root))
     with socketserver.TCPServer(("127.0.0.1", 0), handler) as srv:
@@ -190,17 +202,17 @@ def _render_playwright(url, png_path, w, h, timeout_s) -> dict:
 _VIEWPORT_PAD: "dict[str, tuple[int, int]]" = {}   # per browser binary: window size minus viewport size, measured
 
 
-def _render_cli(url, png_path, w, h, timeout_s) -> dict:
+def _render_cli(url, png_path, w, h, timeout_s, real_time_s=None) -> dict:
     """The full browser in --headless=new gives the page a viewport smaller than --window-size but screenshots
     the whole window, which leaves a flat band at the bottom. The page reports its viewport (WE_VIEWPORT); if it
     is short, shoot again with the window enlarged by the difference and crop to w x h. headless_shell needs no pad."""
     exe = _chromium()
     pad = _VIEWPORT_PAD.get(exe, (0, 0))
-    r = _cli_once(exe, url, png_path, w + pad[0], h + pad[1], timeout_s)
+    r = _cli_once(exe, url, png_path, w + pad[0], h + pad[1], timeout_s, real_time_s)
     vp = r.get("_viewport")
     if r["ok"] and vp and (vp[0] < w or vp[1] < h):                 # short viewport: enlarge the window once
         _VIEWPORT_PAD[exe] = pad = (pad[0] + max(0, w - vp[0]), pad[1] + max(0, h - vp[1]))
-        r = _cli_once(exe, url, png_path, w + pad[0], h + pad[1], timeout_s)
+        r = _cli_once(exe, url, png_path, w + pad[0], h + pad[1], timeout_s, real_time_s)
         vp = r.get("_viewport")
         if r["ok"] and vp and (vp[0] < w or vp[1] < h):
             return {"ok": False, "backend": "없음", "reason": "뷰포트를 %dx%d 로 맞추지 못했다 (%s)" % (w, h, vp)}
@@ -214,14 +226,15 @@ def _render_cli(url, png_path, w, h, timeout_s) -> dict:
     return r
 
 
-def _cli_once(exe, url, png_path, ww, wh, timeout_s) -> dict:
+def _cli_once(exe, url, png_path, ww, wh, timeout_s, real_time_s=None) -> dict:
     Path(png_path).parent.mkdir(parents=True, exist_ok=True)
     out = Path(png_path).resolve()
     if out.exists():
         out.unlink()
     cmd = [exe, "--headless=new", "--no-sandbox", "--hide-scrollbars", *_ARGS,
            "--enable-logging=stderr", "--v=0", "--window-size=%d,%d" % (ww, wh),
-           "--virtual-time-budget=%d" % int(min(timeout_s, 60) * 1000), "--screenshot=%s" % out, url]
+           ("--timeout=%d" % int(real_time_s * 1000)) if real_time_s else ("--virtual-time-budget=%d" % int(min(timeout_s, 60) * 1000)),
+           "--screenshot=%s" % out, url]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
     except subprocess.TimeoutExpired:
@@ -238,6 +251,12 @@ def _cli_once(exe, url, png_path, ww, wh, timeout_s) -> dict:
     if vp:
         r["_viewport"] = (int(vp[0][0]), int(vp[0][1]))
     res = re.findall(r'WE_RESULT:([A-Za-z0-9+/=]+)"', p.stderr)
+    parts = re.findall(r'WE_RESULT_PART:(\d+)/(\d+):([A-Za-z0-9+/=]+)"', p.stderr)
+    if parts:
+        n = int(parts[0][1]); got = {int(i): d for i, _, d in parts}
+        if sorted(got) != list(range(n)):
+            return {"ok": False, "backend": "없음", "reason": "결과 조각이 빠졌다 (%d/%d)" % (len(got), n)}
+        res = ["".join(got[i] for i in range(n))]
     if res:
         r["result"] = json.loads(base64.b64decode(res[0]).decode("utf-8"))
     return r

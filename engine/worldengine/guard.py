@@ -3,7 +3,8 @@
 of agent-written code, or a device after A-06 approval). Independent of whoever produced the trajectory.
 
     check(chain, traj, qd_max=1.5) -> {"ok", "violations": [...]}   traj = {"t": [...], "q": [[...]]}
-Blocks: joint-limit violations (reference check_trajectory), joint speed above qd_max, non-increasing time,
+Blocks: joint-limit violations (reference check_trajectory), joint speed above qd_max, joint acceleration above
+qdd_max (same formula as the device firmware), non-increasing time,
 non-finite numbers, wrong number of joints.
 """
 from __future__ import annotations
@@ -13,7 +14,7 @@ import math
 from worldengine import robot as RB
 
 
-def check(chain: dict, traj: dict, qd_max: float = 1.5) -> dict:
+def check(chain: dict, traj: dict, qd_max: float = 1.5, qdd_max: float = 8.0) -> dict:
     v = []
     n = len(RB.active(chain))
     T, Q = traj.get("t") or [], traj.get("q") or []
@@ -33,6 +34,11 @@ def check(chain: dict, traj: dict, qd_max: float = 1.5) -> dict:
         sp = max(abs(a - b) for a, b in zip(Q[i], Q[i - 1])) / dt
         if sp > qd_max * (1 + 1e-9):
             v.append({"kind": "speed", "step": i, "rad_s": sp, "limit": qd_max})
+    if not v:
+        from worldengine.draw import accelerations
+        for i, a in enumerate(accelerations(Q, T)):
+            if a > qdd_max * (1 + 1e-6):
+                v.append({"kind": "acceleration", "step": i + 2, "rad_s2": a, "limit": qdd_max})
     for s, name, ang, lo, hi in RB.K.check_trajectory(RB.to_robot(chain), Q):
         v.append({"kind": "limit", "step": s, "joint": name, "angle": ang, "range": [lo, hi]})
     return {"ok": not v, "violations": v[:50], "count": len(v)}

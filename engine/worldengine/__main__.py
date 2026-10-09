@@ -92,6 +92,8 @@ def main(argv=None) -> int:
     a.add_argument("--host", default="127.0.0.1"); a.add_argument("--port", type=int, default=8100)
     a = sub.add_parser("v13"); a.add_argument("--limit", type=int); a.add_argument("--yes", action="store_true"); a.add_argument("--out", default=str(OUT))
     a = sub.add_parser("exhibit"); a.add_argument("--world", required=True); a.add_argument("--host", default="127.0.0.1"); a.add_argument("--port", type=int, default=8200)
+    a.add_argument("--no-presence", action="store_true")
+    a = sub.add_parser("gltf"); a.add_argument("world"); a.add_argument("--out", required=True)
     a = sub.add_parser("v12"); a.add_argument("--yes", action="store_true")
     a = sub.add_parser("sandbox-probe")
     a = sub.add_parser("combine"); a.add_argument("a"); a.add_argument("b"); a.add_argument("--bodies", default="juxtapose", choices=["juxtapose", "layer", "seam", "viewpoint"]); a.add_argument("--out")
@@ -124,8 +126,13 @@ def main(argv=None) -> int:
         return 0
     if a.cmd == "exhibit":
         from worldengine import exhibit, world as WD
-        exhibit.serve(WD.load(a.world), a.host, a.port)
+        exhibit.serve(WD.load(a.world), a.host, a.port, presence=not a.no_presence)
         return 0
+    if a.cmd == "gltf":
+        from worldengine import gltf
+        r = gltf.export(a.world, a.out)
+        print(json.dumps(r, ensure_ascii=False))
+        return 0 if r["ok"] else 1
     if a.cmd == "studio":
         from worldengine import world as WD
         from worldengine.studio import server
