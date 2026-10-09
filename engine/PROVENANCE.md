@@ -46,6 +46,8 @@ Tag `r170` = commit `beab9e845f9e5ae11d648f55b24a0e910b56a85a`. All files are by
 | `examples/jsm/shaders/CopyShader.js` | `8c3f2cd443cd4c96edc9c2c04dc760f374d954c9` |
 | `examples/jsm/shaders/LuminosityHighPassShader.js` | `0df9f3e7b248280de1c53292337934ac8dffcdea` |
 | `examples/jsm/shaders/OutputShader.js` | `289ac10088f0924fe0d8507d5c74e7f349bc5308` |
+| `examples/jsm/exporters/GLTFExporter.js` | `4661958d176c38ccacc45b24ab014cf441c0068c` |
+| `examples/jsm/webxr/VRButton.js` | `10c362eb86a867ea2e211de4b82d6830808b9518` |
 
 ## Not copied, used in place
 

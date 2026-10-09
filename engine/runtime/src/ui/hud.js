@@ -52,6 +52,7 @@ export function hud(eng) {
     if (new URLSearchParams(location.search).has('card')) card.hidden = false;   // link that opens on the concept card
   }
   for (const t of eng.world.tours || []) btn('투어' + ((eng.world.tours.length > 1) ? ' · ' + (t.title || t.id) : ''), () => eng.startTour(t.id));
+  btn('glTF', async () => { const { downloadGLB } = await import('../export.js'); downloadGLB(eng); });   // XR-10: take it to Blender/Unity/Godot
   const bOrbit = btn('둘러보기', () => eng.setMode('orbit')), bWalk = btn('걷기', () => eng.setMode('walk'));
   const bAdult = btn('어른 눈높이', () => eng.setEye('adult')), bChild = btn('아이 눈높이', () => eng.setEye('child'));
   const help = () => eng.mode === 'walk'
@@ -63,11 +64,12 @@ export function hud(eng) {
     bAdult.textContent = `어른 ${eng.world.player?.eye_heights?.adult ?? 1.7} m`; bChild.textContent = `아이 ${eng.world.player?.eye_heights?.child ?? 1.1} m`;
     sel.value = eng.viewName; sel.hidden = eng.mode === 'walk';
     top.innerHTML = `<b></b><div class="we-help"></div>`; top.firstChild.textContent = eng.world.name; top.lastChild.textContent = help();
+    if (eng.presence) { const d = document.createElement('div'); d.className = 'we-help'; d.textContent = `함께 있는 사람 ${eng.presence.count}명 (익명)`; top.appendChild(d); }
     const v = eng.world.verify && eng.world.verify['V-16'];     // a drawing robot world carries its own verification
     if (v) { const d = document.createElement('div'); d.className = 'we-help';
       d.textContent = `V-16 ${v.pass ? '통과' : '실패'} · 획 오차 최대 ${(v.stroke_err_max_m * 1e3).toFixed(3)} mm · 한계 위반 ${v.limit_violations} · 충돌 ${v.self_collisions}`; top.appendChild(d); }
   };
-  for (const ev of ['mode', 'eye', 'view']) eng.on(ev, refresh);
+  for (const ev of ['mode', 'eye', 'view', 'presence']) eng.on(ev, refresh);
   refresh();
 }
 

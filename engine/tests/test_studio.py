@@ -152,11 +152,15 @@ class ApprovalTests(NoNetwork):
         self.assertEqual([w["file"] for w in listed], ["work.world.json"])
         self.assertFalse(r["deployed"])
 
-    def test_drive_device_has_no_executor(self):
+    def test_drive_device_reaches_only_the_simulated_device(self):
         s = SS.Session(YEOBAEK, SV.executors(self.tmp / "out"))
-        aid = s.request("drive_device", {}, "w")["approval"]
-        r = s.approve(aid)
-        self.assertFalse(r["ran"]); self.assertIn("연결돼 있지 않다", r["reason"])
+        r = s.approve(s.request("drive_device", {}, "w")["approval"])
+        self.assertEqual((r["device"], r["ok"]), ("simulated", False))                  # no robot in this world: says so
+        robot = WD.load(ENGINE / "worlds" / "drawing_robot.world.json")
+        s2 = SS.Session(robot, SV.executors(self.tmp / "out"))
+        r2 = s2.approve(s2.request("drive_device", {}, "w")["approval"])
+        self.assertEqual((r2["device"], r2["ok"], r2["state"]), ("simulated", True, "done"))
+        self.assertIn("연결 안 됨", r2["real_device"])
 
 
 class AgentTests(NoNetwork):

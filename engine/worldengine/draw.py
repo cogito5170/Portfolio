@@ -11,7 +11,9 @@
   the plane (a planar arm cannot leave it). An arm that should lift its wrist instead sets opts pen_lift_ik (m).
 - opts enforce_limits=False plans without projecting onto the joint limits -- used to prove that the
   verifier catches violations (V-16: "일부러 한계를 넘는 그림을 넣어 검출 확인").
-- Time: each step is as slow as the slower of tip speed (draw/travel) and joint speed limit.
+- Time: each step is as slow as the slower of tip speed (draw/travel) and joint speed limit; then a time-scaling
+  pass slows neighbouring steps until joint acceleration (computed the way the device firmware computes it) is
+  within qdd_max. Without it the simulated device rejected the demo drawing at its 9th sample (RB-06 finding).
 - Verification uses the reference FK and the reference limit check (kinematics.check_trajectory); the chord
   check probes the joint-space interpolation between samples, which the IK never sees.
 
@@ -24,7 +26,7 @@ import re
 
 from worldengine import robot as RB
 
-DEFAULTS = {"ds": 0.02, "v_draw": 0.25, "v_travel": 0.6, "qd_max": 1.5, "tol": 1e-5, "chord_tol": 0.002,
+DEFAULTS = {"ds": 0.02, "v_draw": 0.25, "v_travel": 0.6, "qd_max": 1.5, "qdd_max": 8.0, "tol": 1e-5, "chord_tol": 0.002,
             "lam": 0.02, "iters": 60, "link_clearance": 0.04,
             "pen_lift_ik": 0.0, "enforce_limits": True, "continuous": False}
 
@@ -197,9 +199,41 @@ def plan(chain: dict, strokes, plane: dict, q_home=None, opts=None) -> dict:
             go(to3(plane, uv), 1, sid, o["v_draw"])
         if not cont or last:
             go(to3(plane, pts[-1], lift), 0, sid, o["v_draw"] / 4)                                  # pen up
+    T = time_scale(Q, T, o["qdd_max"])
     traj = {"t": T, "q": Q, "pen": PEN, "target": TARGET, "stroke": STROKE}
     return {"chain": chain, "plane": plane, "strokes": strokes, "opts": o, "trajectory": traj,
             "verify": verify(chain, traj, o, unreachable)}
+
+
+def accelerations(Q, T) -> "list[float]":
+    """Max joint acceleration per step, the firmware's way: |v_i - v_{i-1}| / dt_i with v_i = dq_i / dt_i (from i = 2)."""
+    out, v_prev = [], None
+    for i in range(1, len(Q)):
+        dt = T[i] - T[i - 1]
+        v = [(a - b) / dt for a, b in zip(Q[i], Q[i - 1])]
+        if v_prev is not None:
+            out.append(max(abs(a - b) for a, b in zip(v, v_prev)) / dt)
+        v_prev = v
+    return out
+
+
+def time_scale(Q, T, qdd_max: float, max_passes: int = 400) -> "list[float]":
+    """Stretch steps until every acceleration <= qdd_max. Scaling dt_{i-1} and dt_i by k divides the local
+    acceleration by about k^2, so this converges; the path (Q) is untouched."""
+    dt = [T[i] - T[i - 1] for i in range(1, len(T))]
+    for _ in range(max_passes):
+        changed = False
+        for i in range(1, len(dt)):
+            v1 = [(a - b) / dt[i - 1] for a, b in zip(Q[i], Q[i - 1])]
+            v2 = [(a - b) / dt[i] for a, b in zip(Q[i + 1], Q[i])]
+            if max(abs(a - b) for a, b in zip(v2, v1)) / dt[i] > qdd_max * (1 - 1e-6):
+                dt[i - 1] *= 1.1; dt[i] *= 1.1; changed = True
+        if not changed:
+            break
+    out = [T[0]]
+    for d in dt:
+        out.append(out[-1] + d)
+    return out
 
 
 # ---------------------------------------------------------------- verification (V-16)
@@ -264,8 +298,10 @@ def verify(chain: dict, traj: dict, o=DEFAULTS, unreachable=None) -> dict:
         "unreachable": len(unreachable or []), "unreachable_first": (unreachable or [None])[0],
         "limit_violations": len(viol), "limit_violation_first": list(viol[0]) if viol else None,
         "qd_max_measured": qd, "qd_max_allowed": o["qd_max"], "pen_speed_max_mps": v_pen,
+        "qdd_max_measured": max(accelerations(Q, traj["t"]), default=0.0), "qdd_max_allowed": o.get("qdd_max", DEFAULTS["qdd_max"]),
         "self_collisions": len(coll), "min_link_gap_m": None if min_gap == float("inf") else min_gap,
-        "pass": stroke_err <= 1e-3 and chord <= o["chord_tol"] and not unreachable and not viol and not coll and qd <= o["qd_max"] * (1 + 1e-9),
+        "pass": stroke_err <= 1e-3 and chord <= o["chord_tol"] and not unreachable and not viol and not coll and qd <= o["qd_max"] * (1 + 1e-9)
+                and max(accelerations(Q, traj["t"]), default=0.0) <= o.get("qdd_max", DEFAULTS["qdd_max"]) * (1 + 1e-6),
     }
 
 
@@ -321,6 +357,7 @@ def report_md(p: dict, title: str, effects=None) -> str:
             ("관절 한계 위반 (reference check_trajectory)", str(v["limit_violations"]), "0"),
             ("자기 충돌 (이웃 아닌 링크 간격 < %.0f mm)" % (p["opts"]["link_clearance"] * 1e3), str(v["self_collisions"]), "0"),
             ("최대 관절 속도", "%.3f rad/s" % v["qd_max_measured"], "≤ %.1f rad/s" % v["qd_max_allowed"]),
+            ("최대 관절 가속도", "%.2f rad/s²" % v["qdd_max_measured"], "≤ %.1f rad/s²" % v["qdd_max_allowed"]),
             ("그리는 도중 펜 떼기", str(v["pen_lifts"]), "(개념이 정하면 그 값)")]
     L = ["# V-16 " + title, "", "- 로봇: `%s` (%s), 관절 %d개 · 표본 %d · 펜 내림 %d · 재생 %.1f s" % (
         p["chain"]["name"], p["chain"].get("source", ""), len(RB.active(p["chain"])), v["samples"], v["pen_down_samples"], v["duration_s"]),

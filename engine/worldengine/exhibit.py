@@ -22,7 +22,7 @@ STATIC = {"runtime": ENGINE / "runtime", "vendor": ENGINE / "vendor"}
 RATE = (20, 60.0)                 # requests per window (s) per address
 
 
-def make_handler(world: dict, talk: "CH.Talk | None"):
+def make_handler(world: dict, talk: "CH.Talk | None", room=None):
     hits, lock = {}, threading.Lock()
     world_bytes = json.dumps(world, ensure_ascii=False).encode("utf-8")
 
@@ -37,8 +37,12 @@ def make_handler(world: dict, talk: "CH.Talk | None"):
 
         def do_GET(self):
             parts = [p for p in urlparse(self.path).path.split("/") if p]
+            if parts == ["ws"] and room is not None:
+                from worldengine import presence
+                return presence.upgrade(self, room)
             if not parts:
-                self.send_response(302); self.send_header("Location", "/runtime/index.html?world=/world.json" + ("&talk=/api/talk" if talk else "")); self.end_headers(); return
+                self.send_response(302); self.send_header("Location", "/runtime/index.html?world=/world.json" + ("&talk=/api/talk" if talk else "")
+                                                         + ("&presence=/ws" if room is not None else "")); self.end_headers(); return
             if parts == ["world.json"]:
                 return self._send(200, world_bytes)
             if parts[0] in STATIC:
@@ -70,13 +74,16 @@ def make_handler(world: dict, talk: "CH.Talk | None"):
     return H
 
 
-def serve(world: dict, host="127.0.0.1", port=8200):
+def serve(world: dict, host="127.0.0.1", port=8200, presence: bool = True):
     from worldengine.studio import server as S
     client, why = S.make_client()
     talk = CH.Talk(world, client) if client else None
-    srv = http.server.ThreadingHTTPServer((host, port), make_handler(world, talk))
+    from worldengine import presence as PR
+    room = PR.Room(world.get("bounds")) if presence else None
+    srv = http.server.ThreadingHTTPServer((host, port), make_handler(world, talk, room))
     print("전시: http://%s:%d/" % ("localhost" if host == "127.0.0.1" else host, port))
     print("캐릭터:", "실시간 대답" if talk else "대본 대사만 — " + why)
+    print("함께 보기:", "켜짐 (/ws, 익명, 기록 없음)" if room else "꺼짐")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

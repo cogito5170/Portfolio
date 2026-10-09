@@ -33,7 +33,7 @@ PAGE = Path(__file__).with_name("studio.html")
 
 
 def executors(out_dir: Path) -> dict:
-    """What runs after the artist approves (A-06). drive_device has no executor: there is no device bridge yet."""
+    """What runs after the artist approves (A-06). drive_device drives the SIMULATED device only (RB-06)."""
     def render_highres(s, args):
         out_dir.mkdir(parents=True, exist_ok=True)
         png = out_dir / ("render_v%d.png" % s.versions[-1]["n"])
@@ -58,7 +58,22 @@ def executors(out_dir: Path) -> dict:
         from worldengine import promote
         return promote.install(args["code"], args["name"], "1", args["rows"], out_dir.parent)
 
-    return {"render_highres": render_highres, "publish": publish, "delete_work": delete_work, "promote_plugin": promote_plugin}
+    def drive_device(s, args):
+        """RB-06: only the SIMULATED device is wired here. The trajectory must pass the host guard and then the
+        device's own firmware limits; a real device needs its own bridge (hardware) and is not connected."""
+        from worldengine import device as DV
+        arm = next((e for e in s.world.get("entities") or [] if e.get("type") == "robot.arm" and e.get("trajectory")), None)
+        if arm is None:
+            return {"device": "simulated", "ok": False, "reason": "이 세계에는 궤적을 가진 로봇 팔이 없다"}
+        dev = DV.SimDevice(arm["chain"])
+        try:
+            r = DV.Bridge(arm["chain"], dev).drive(arm["trajectory"])
+        finally:
+            dev.close()
+        return {"device": "simulated", "real_device": "연결 안 됨 (실제 장치 다리는 하드웨어가 필요하다)", **r}
+
+    return {"render_highres": render_highres, "publish": publish, "delete_work": delete_work, "promote_plugin": promote_plugin,
+            "drive_device": drive_device}
 
 
 class Studio:
