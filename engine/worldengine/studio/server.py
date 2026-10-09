@@ -20,6 +20,7 @@ import copy
 import http.server
 import json
 import mimetypes
+import re
 import secrets
 import shutil
 import threading
@@ -32,6 +33,7 @@ from worldengine.studio import agent as AG, board as BD, config, diff as DF, ses
 ENGINE = Path(__file__).resolve().parents[2]
 STATIC = {"runtime": ENGINE / "runtime", "vendor": ENGINE / "vendor"}
 PAGE = Path(__file__).with_name("studio.html")
+COPAGE = Path(__file__).with_name("cocreate.html")
 
 
 def executors(out_dir: Path) -> dict:
@@ -80,7 +82,7 @@ def executors(out_dir: Path) -> dict:
 
 
 class Studio:
-    def __init__(self, world: dict, artist: str, client=None, data=None):
+    def __init__(self, world: dict, artist: str, client=None, data=None, router=None):
         self.data = Path(data or config.data_dir())
         from worldengine import ledger as LG
         self.ledger = LG.Ledger(artist, self.data)
@@ -91,6 +93,62 @@ class Studio:
         self.token = secrets.token_urlsafe(16)
         self.last_text = ""
         self.lock = threading.Lock()
+        self.router, self.router_note = router, ""                 # co-creation (CC): Anthropic and/or Gemini, per role
+        if router is None:
+            try:
+                from worldengine.cocreate import providers as PV
+                self.router, self.router_note = PV.from_env(client)
+            except ImportError as e:
+                self.router, self.router_note = None, "공동 창작에는 pydantic 이 필요하다 (pip install -r requirements-cocreate.txt): %s" % e
+        self.runs = {}
+
+    # ---------------------------------------------------------------- co-creation (SPEC CC)
+    def _bg(self, fn, *a):
+        threading.Thread(target=fn, args=a, daemon=True).start()
+
+    def co_start(self, body: dict) -> dict:
+        if self.router is None:
+            return {"error": "공동 창작 모델이 연결돼 있지 않다 — " + self.router_note}
+        from worldengine.cocreate import run as RN
+        text = str(body.get("text", "")).strip()[:4000]
+        if not text:
+            raise ValueError("text 가 비었다")
+        r = RN.Run(self.router, self.session, self.data / "cocreate", session_lock=self.lock)
+        self.runs[r.id] = r
+        self._bg(r.start, text)
+        return {"run": r.id, "providers": r.state["providers"], "note": self.router_note}
+
+    def co_run(self, rid: str):
+        r = self.runs.get(rid)
+        d = self.data / "cocreate" / str(rid)
+        if r is None and re.fullmatch(r"[\w-]{1,64}", str(rid)) and (d / "state.json").is_file() and self.router is not None:
+            from worldengine.cocreate import run as RN                 # after a restart: the run continues where it waited
+            r = RN.Run.load(d, self.router, self.session, self.lock)
+            if r.state["stage"] not in ("brief_review", "choose", "done", "error"):
+                r.state["error"] = {"where": r.state["stage"], "reason": "스튜디오가 다시 시작돼 이 단계에서 멈췄다"}
+                r._stage("error", reason=r.state["error"]["reason"])
+            self.runs[rid] = r
+        if r is None:
+            raise KeyError("그런 공동 창작 실행이 없다: %s" % rid)
+        return r
+
+    def co_brief(self, rid: str, body: dict) -> dict:
+        r = self.co_run(rid)
+        if r.state["stage"] != "brief_review":
+            raise ValueError("명세를 확인할 단계가 아니다: %s" % r.state["stage"])
+        from worldengine.cocreate import schema as S
+        S.CreativeBrief.model_validate(body.get("brief") or r.state["brief"])      # a bad edit is refused here, before the thread
+        self._bg(r.confirm_brief, body.get("brief"))
+        return {"ok": True}
+
+    def co_choose(self, rid: str, body: dict) -> dict:
+        r = self.co_run(rid)
+        if r.state["stage"] != "choose":
+            raise ValueError("고를 단계가 아니다: %s" % r.state["stage"])
+        if body.get("idea") not in {c["id"] for c in r.state["cards"]}:
+            raise ValueError("그런 아이디어가 없다: %s" % body.get("idea"))
+        self._bg(r.choose, body["idea"], str(body.get("note", ""))[:500])
+        return {"ok": True}
 
     def state(self) -> dict:
         s = self.session
@@ -100,7 +158,7 @@ class Studio:
                 "approvals": [{k: a[k] for k in ("id", "kind", "why", "status")} | {"message": SS.NEEDS_APPROVAL[a["kind"]], "result": a.get("result")} for a in s.approvals.values()],
                 "variant_sets": [{"id": v["id"], "why": v["why"]} for v in s.variant_sets],
                 "preview": (getattr(s, "previews", None) or [None])[-1],
-                "agent": self.agent is not None}
+                "agent": self.agent is not None, "cocreate": self.router is not None, "cocreate_note": self.router_note}
 
     def message(self, body: dict) -> dict:
         if self.agent is None:
@@ -127,7 +185,10 @@ def make_handler(st: Studio):
         def _send(self, code, body, ctype="application/json; charset=utf-8"):
             data = body if isinstance(body, bytes) else (json.dumps(body, ensure_ascii=False) if not isinstance(body, str) else body).encode("utf-8")
             self.send_response(code); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store"); self.end_headers(); self.wfile.write(data)
+            try:
+                self.send_header("Cache-Control", "no-store"); self.end_headers(); self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError):
+                pass                                        # the page went away (a long poll from a phone that slept)
 
         def _authed(self, q):
             return (q.get("t", [""])[0] or self.headers.get("X-Studio-Token", "")) == st.token
@@ -142,10 +203,33 @@ def make_handler(st: Studio):
                 if base in f.parents and f.is_file() and "tests" not in f.relative_to(base).parts:
                     return self._send(200, f.read_bytes(), (mimetypes.guess_type(f.name)[0] or "application/octet-stream").replace("text/javascript", "application/javascript"))
                 return self._send(404, {"error": "not found"})
+            if u.path == "/cocreate":
+                return self._send(200, COPAGE.read_text(encoding="utf-8"), "text/html; charset=utf-8")
             if parts[:1] != ["api"]:
                 return self._send(404, {"error": "not found"})
             if not self._authed(q):
                 return self._send(403, {"error": "token"})
+            if parts[1:2] == ["cocreate"] and len(parts) >= 3:              # outside st.lock: events wait (long poll)
+                try:
+                    r = st.co_run(parts[2])
+                except KeyError as e:
+                    return self._send(404, {"error": str(e)})
+                if parts[3:] == ["events"]:
+                    after, wait = int(q.get("after", ["0"])[0] or 0), min(25.0, float(q.get("wait", ["0"])[0] or 0))
+                    return self._send(200, {"events": r.events.since(after, wait), "stage": r.state["stage"]})
+                if parts[3:] == []:
+                    return self._send(200, r.summary())
+                if len(parts) == 5 and parts[3] in ("sketch", "plan") and parts[4].rsplit(".", 1)[0] in {c["id"] for c in r.state["cards"]}:
+                    from worldengine import footprint as FP
+                    from worldengine.cocreate import measure as MS
+                    card = next(c for c in r.state["cards"] if c["id"] == parts[4].rsplit(".", 1)[0])
+                    w = MS.sketch_world(card, r.state["brief"])
+                    return self._send(200, w) if parts[3] == "sketch" else self._send(200, FP.plan_svg(w, 360), "image/svg+xml")
+                if parts[3:] == ["world.json"] and r.state.get("realization"):
+                    return self._send(200, r.state["realization"]["world"])
+                if parts[3:] == ["production.md"] and r.state.get("realization"):
+                    return self._send(200, r.state["realization"]["plan_md"], "text/markdown; charset=utf-8")
+                return self._send(404, {"error": "not found"})
             with st.lock:
                 if parts[1:] == ["state"]:
                     return self._send(200, st.state())
@@ -171,6 +255,19 @@ def make_handler(st: Studio):
             if n > 12 * 1024 * 1024:
                 return self._send(413, {"error": "too large"})
             body = json.loads(self.rfile.read(n) or b"{}")
+            act = u.path[5:]
+            try:
+                if act == "cocreate":                                       # CC: runs in its own thread
+                    return self._send(200, st.co_start(body))
+                cp = act.split("/")
+                if len(cp) == 3 and cp[0] == "cocreate" and cp[2] == "brief":
+                    return self._send(200, st.co_brief(cp[1], body))
+                if len(cp) == 3 and cp[0] == "cocreate" and cp[2] == "choose":
+                    return self._send(200, st.co_choose(cp[1], body))
+            except KeyError as e:
+                return self._send(404, {"error": str(e)})
+            except ValueError as e:
+                return self._send(400, {"error": str(e)[:600]})
             try:
                 with st.lock:
                     act = u.path[5:]
@@ -213,6 +310,8 @@ def serve(world: dict, artist: str, host="127.0.0.1", port=8100):
     srv = http.server.ThreadingHTTPServer((host, port), make_handler(st))
     print("스튜디오: http://%s:%d/?t=%s" % ("localhost" if host == "127.0.0.1" else host, port, st.token))
     print("에이전트:", "연결됨 (모델 %s)" % config.model() if client else "없음 — " + why)
+    print("공동 창작:", ("http://%s:%d/cocreate?t=%s" % ("localhost" if host == "127.0.0.1" else host, port, st.token)) if st.router else "없음 — " + st.router_note,
+          ("(%s)" % st.router_note) if st.router and st.router_note else "")
     if host != "127.0.0.1":
         print("주의: 같은 네트워크에서 열린다. 위 주소(토큰 포함)를 아는 사람만 쓸 수 있다.")
     try:

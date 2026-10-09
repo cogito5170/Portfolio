@@ -109,5 +109,5 @@ def ports(world: dict, params: dict) -> dict:
     return {"palette": _palette(world) or [], "tempo_bpm": float(params["tempo_bpm"]), "events": ["beat", "note_on"]}
 
 
-PLUGIN = {"name": "sound_synth", "version": "1", "medium": "sound", "translate": translate, "generate": generate,
+PLUGIN = {"name": "sound_synth", "version": "1", "medium": "sound", "procedural": True, "translate": translate, "generate": generate,
           "self_assess": self_assess, "ports": ports}

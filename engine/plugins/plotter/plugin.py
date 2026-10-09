@@ -109,5 +109,5 @@ def ports(world: dict, params: dict) -> dict:
     return {"palette": [_ink(world)], "tempo_bpm": round(60 * params["v_draw"] / 0.25, 1), "events": ["pen_down", "pen_up"]}
 
 
-PLUGIN = {"name": "plotter", "version": "1", "medium": "drawing", "translate": translate, "generate": generate,
+PLUGIN = {"name": "plotter", "version": "1", "medium": "drawing", "procedural": True, "translate": translate, "generate": generate,
           "self_assess": self_assess, "ports": ports}

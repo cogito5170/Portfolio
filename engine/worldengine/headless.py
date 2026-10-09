@@ -177,6 +177,45 @@ def render_url(url: str, png_path, w: int = 640, h: int = 400, timeout_s: float 
     return _render_cli(url, png_path, w, h, timeout_s, real_time_s, extra)
 
 
+def tour_frames(world, frames_dir, tour: "str | None" = None, w: int = 1280, h: int = 720, fps: int = 24,
+                max_s: float = 120, timeout_s: float = 600) -> dict:
+    """D-05: the runtime plays the tour at a fixed frame step and POSTs every frame (JPEG) here; they land in
+    frames_dir as 00000.jpg, 00001.jpg, ... Returns the page's report (frames, seconds, captions with times)."""
+    ok, why = available()
+    if not ok:
+        return {"ok": False, "backend": "없음", "reason": why}
+    frames_dir = Path(frames_dir); frames_dir.mkdir(parents=True, exist_ok=True)
+    tmp = Path(tempfile.mkdtemp(prefix="worldengine_tv_"))
+    try:
+        os.symlink(RUNTIME, tmp / "runtime")
+        (tmp / "vendor").mkdir()
+        os.symlink(os.path.abspath(_three_dir()), tmp / "vendor" / "three")
+        data = world if isinstance(world, dict) else json.loads(Path(world).read_text(encoding="utf-8"))
+        (tmp / "world.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+        class H(_Quiet):
+            def do_POST(self):
+                m = re.fullmatch(r"/frame/(\d{1,6})", self.path)
+                n = int(self.headers.get("Content-Length", 0))
+                if not m or n > 20 * 1024 * 1024:
+                    self.send_response(400); self.end_headers(); return
+                (frames_dir / ("%05d.jpg" % int(m.group(1)))).write_bytes(self.rfile.read(n))
+                self.send_response(204); self.end_headers()
+        q = "runtime/index.html?world=/world.json&w=%d&h=%d&headless=1&selftest=tourvideo&fps=%d&max_s=%g%s" % (
+            w, h, fps, max_s, ("&tour=" + quote(tour, safe="")) if tour else "")
+        # Wall clock, not virtual time: the page steps world time itself (1/fps per frame), and under
+        # --virtual-time-budget the browser quit when the budget ran out, whether or not the page had finished
+        # (measured on full Chromium 1194: 2 of 6 runs ended at rc=0 after 59 and 120 of 120 frames, no report).
+        with http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(H, directory=str(tmp))) as srv:
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            try:
+                return run_live("http://127.0.0.1:%d/%s" % (srv.server_address[1], q), timeout_s, w, h)
+            finally:
+                srv.shutdown()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def run_live(url: str, timeout_s: float = 60, w: int = 640, h: int = 400, fake_media: bool = False) -> dict:
     """The page on the wall clock until it reports WE_STATUS, then the browser is stopped. No screenshot.
     Why: in Chromium's own --timeout mode the page's timers stop once a camera, microphone or audio stream starts
@@ -223,8 +262,8 @@ def run_live(url: str, timeout_s: float = 60, w: int = 640, h: int = 400, fake_m
     return r
 
 
-def _shoot(root: Path, rel_url: str, png_path, w, h, timeout_s, real_time_s=None) -> dict:
-    handler = functools.partial(_Quiet, directory=str(root))
+def _shoot(root: Path, rel_url: str, png_path, w, h, timeout_s, real_time_s=None, handler=None) -> dict:
+    handler = handler or functools.partial(_Quiet, directory=str(root))
     with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as srv:      # parallel requests: matters on the wall clock
         port = srv.server_address[1]
         threading.Thread(target=srv.serve_forever, daemon=True).start()

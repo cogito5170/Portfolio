@@ -94,6 +94,12 @@ def main(argv=None) -> int:
     a = sub.add_parser("exhibit"); a.add_argument("--world", required=True); a.add_argument("--host", default="127.0.0.1"); a.add_argument("--port", type=int, default=8200)
     a.add_argument("--no-presence", action="store_true")
     a = sub.add_parser("gltf"); a.add_argument("world"); a.add_argument("--out", required=True)
+    a = sub.add_parser("tour-video"); a.add_argument("world"); a.add_argument("--out", required=True); a.add_argument("--tour")
+    a.add_argument("--w", type=int, default=1280); a.add_argument("--h", type=int, default=720); a.add_argument("--fps", type=int, default=24)
+    a = sub.add_parser("preserve"); a.add_argument("world"); a.add_argument("--out", required=True)
+    a = sub.add_parser("replay"); a.add_argument("bundle")
+    a = sub.add_parser("licenses"); a.add_argument("world", nargs="?")
+    a = sub.add_parser("urdf"); a.add_argument("world"); a.add_argument("--out", required=True); a.add_argument("--id")
     a = sub.add_parser("v12"); a.add_argument("--yes", action="store_true")
     a = sub.add_parser("sandbox-probe")
     a = sub.add_parser("combine"); a.add_argument("a"); a.add_argument("b"); a.add_argument("--bodies", default="juxtapose", choices=["juxtapose", "layer", "seam", "viewpoint"]); a.add_argument("--out")
@@ -127,6 +133,31 @@ def main(argv=None) -> int:
     if a.cmd == "exhibit":
         from worldengine import exhibit, world as WD
         exhibit.serve(WD.load(a.world), a.host, a.port, presence=not a.no_presence)
+        return 0
+    if a.cmd == "tour-video":
+        from worldengine import video
+        r = video.tour_video(a.world, a.out, a.tour, a.w, a.h, a.fps)
+        print(json.dumps({k: v for k, v in r.items() if k != "captions"}, ensure_ascii=False))
+        return 0 if r["ok"] else 1
+    if a.cmd == "preserve":
+        from worldengine import preserve
+        r = preserve.bundle(a.world, a.out)
+        print(json.dumps(r, ensure_ascii=False)); return 0 if r["ok"] else 1
+    if a.cmd == "replay":
+        from worldengine import preserve
+        r = preserve.replay(a.bundle)
+        print(json.dumps(r, ensure_ascii=False)); return 0 if r.get("ok") else 1
+    if a.cmd == "licenses":
+        from worldengine import licenses as LC, world as WD
+        print(LC.markdown(LC.for_world(WD.load(a.world)) if a.world else LC.table(), "라이선스 표 (R-03)" + (" — " + a.world if a.world else "")))
+        return 0
+    if a.cmd == "urdf":
+        from worldengine import robot as RB, world as WD
+        arms = [e for e in WD.load(a.world).get("entities") or [] if e.get("type") == "robot.arm" and (a.id is None or e.get("id") == a.id)]
+        if not arms:
+            print("이 세계에 로봇 팔이 없다" + (" (id %s)" % a.id if a.id else "")); return 2
+        Path(a.out).write_text(RB.to_urdf(arms[0]["chain"]), encoding="utf-8")
+        print("URDF:", a.out, "(관절 %d개, 운동학만)" % len(arms[0]["chain"]["joints"]))
         return 0
     if a.cmd == "gltf":
         from worldengine import gltf

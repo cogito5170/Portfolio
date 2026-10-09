@@ -102,5 +102,5 @@ def ports(world: dict, params: dict) -> dict:
     return {"palette": pal, "tempo_bpm": round(40 + 140 * params["rot_max"] / 180, 1), "events": []}
 
 
-PLUGIN = {"name": "image_svg", "version": "1", "medium": "image", "translate": translate, "generate": generate,
+PLUGIN = {"name": "image_svg", "version": "1", "medium": "image", "procedural": True, "translate": translate, "generate": generate,
           "self_assess": self_assess, "ports": ports}

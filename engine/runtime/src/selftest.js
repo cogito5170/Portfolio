@@ -239,4 +239,23 @@ export const selftests = {
     out.scale_after_off = o && o.userData.baseScale ? +(o.scale.x / o.userData.baseScale.x).toFixed(3) : null;
     return out;
   },
+  // D-05 tour video: the artist's tour stepped frame by frame (fixed dt, not the wall clock); each frame goes to the
+  // harness as a JPEG (POST /frame/<n>); the captions shown come back with their times for the subtitle track.
+  async tourvideo(eng) {
+    const P = new URLSearchParams(location.search), fps = +P.get('fps') || 24, maxS = +P.get('max_s') || 120;
+    const id = P.get('tour') || ((eng.world.tours || [])[0] || {}).id;
+    if (!id || !eng.startTour(id)) return { error: 'no tour ' + (id || '') };
+    const cv = eng.renderer.domElement, t0 = eng.realTime, c0 = eng.captionLog.length;
+    let n = 0;
+    while (n < fps * maxS) {
+      eng.step(1 / fps, true);
+      const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.9));
+      const res = await fetch('/frame/' + n, { method: 'POST', body: blob });
+      if (!res.ok) return { error: 'frame upload HTTP ' + res.status };
+      n++;
+      if (!eng.tour) break;
+    }
+    return { tour: id, frames: n, fps, seconds: +(n / fps).toFixed(3), size: [cv.width, cv.height], ended: !eng.tour,
+      captions: eng.captionLog.slice(c0).map(c => ({ t: +(c.t - t0).toFixed(3), text: c.text, seconds: c.seconds })) };
+  },
 };

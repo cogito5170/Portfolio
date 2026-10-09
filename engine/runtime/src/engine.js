@@ -269,7 +269,7 @@ export class Engine {
   }
 
   caption(text, obj, seconds) {
-    this.captionLog.push({ t: +this.realTime.toFixed(3), text, id: obj && obj.userData ? obj.userData.id : null });
+    this.captionLog.push({ t: +this.realTime.toFixed(3), text, id: obj && obj.userData ? obj.userData.id : null, seconds: seconds ?? 4 });
     this.captions.show(text, seconds);
     this.emit('caption', text);
   }
