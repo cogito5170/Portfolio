@@ -223,6 +223,8 @@ def _check_experience(w, bad):
             if not isinstance(e, dict):
                 continue
             q = "%s[%d]" % (path, i)
+            if "eye_only" in e and e["eye_only"] not in ("child", "adult"):
+                bad.append("%s.eye_only must be child|adult" % q)
             if e.get("type") == "sound" and not (isinstance(e.get("caption"), str) and e["caption"]):
                 bad.append("%s is a sound without caption (소리마다 자막이 필요하다)" % q)
             if e.get("type") == "character":

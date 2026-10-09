@@ -67,6 +67,7 @@ export class Engine {
                   rnd: () => ((seed = (seed * 16807) % 2147483647) / 2147483647) };
     for (const e of world.entities) this.root.add(this._build(e, ctx, [0, 0, 0]));
     this._solidColliders();
+    this.eyeOnly = []; this.root.traverse(o => { if (o.userData.entity && o.userData.entity.eye_only) this.eyeOnly.push(o); });
     this.eyeName = eye || (world.player && world.player.eye) || 'adult';
     this.setView(view && this.views[view] ? view : Object.keys(this.views)[0]);
     this.setMode(mode || (world.controls && world.controls.default) || 'orbit');
@@ -134,6 +135,9 @@ export class Engine {
 
   eyeHeight() { return W.eyeHeight(this.world, this.eyeName); }
 
+  // Walking: the chosen eye. Orbiting: below 1.4 m counts as a child's eye.
+  currentEye() { return this.mode === 'walk' ? this.eyeName : (FROM3(this.camera.position)[2] < 1.4 ? 'child' : 'adult'); }
+
   setEye(name) {
     this.eyeName = name;
     if (this.walk && this.walk.state) this.walk.state = { ...this.walk.state, eye: this.eyeHeight() };
@@ -194,6 +198,10 @@ export class Engine {
     if (this.tour) this._tourStep();
     else if (this.interaction && (!this.headless || this.selftest)) this.interaction.step();
     if (this.audio) this.audio.update(this.camera);
+    if (this.eyeOnly && this.eyeOnly.length) {      // K-04 viewpoint synthesis: which world you see depends on your eye height
+      const eye = this.currentEye();
+      for (const o of this.eyeOnly) o.visible = o.userData.entity.eye_only === eye;
+    }
     if (this.mode === 'walk' && this.walk) { this.walk.update(dt); if (this.walk.state) this._applyWalk(); }
     else if (this.orbit && this.orbit.enabled) this.orbit.update();
     this.emit('step', dt);

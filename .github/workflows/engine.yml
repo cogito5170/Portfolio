@@ -15,6 +15,20 @@ jobs:
           out=$(npx --yes @puppeteer/browsers@2.6.1 install chrome-headless-shell@stable --path "$RUNNER_TEMP/browsers")
           echo "$out"
           echo "WE_CHROMIUM=$(echo "$out" | tail -1 | awk '{print $2}')" >> "$GITHUB_ENV"
+      - name: Sandbox isolation (N-03) -- allow user namespaces on this throwaway runner VM, then probe
+        working-directory: engine
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || echo "sysctl not changed (not an AppArmor-restricted kernel?)"
+          python -m worldengine sandbox-probe | tee sandbox_probe.json
+      - name: Stage-5 tests with a plain ran/skipped count for the sandbox escape tests
+        working-directory: engine
+        run: |
+          python -m unittest tests.test_stage5 -v 2>&1 | tee stage5.log
+          ran=$(grep -cE '^test_.*(SandboxEscapeTests|PromotionTests).* \.\.\. ok$' stage5.log || true)
+          skipped=$(grep -cE '^test_.*(SandboxEscapeTests|PromotionTests).* \.\.\. skipped' stage5.log || true)
+          echo "SANDBOX ESCAPE + PROMOTION TESTS: ran-and-passed=$ran skipped=$skipped (a skip is NOT a pass)"
+          grep -E 'skipped' stage5.log || true
+          tail -3 stage5.log | grep -q '^OK' || exit 1
       - name: JS unit tests (node --test; also run from the Python suite)
         working-directory: engine
         run: node --version && node --test runtime/tests/*.test.mjs

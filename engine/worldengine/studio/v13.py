@@ -111,8 +111,11 @@ def run(items, client_factory, model=None) -> "list[dict]":
         ag = AG.Agent(client_factory(), s, None, model)
         turn = ag.send(it["request"])
         ok, why = score(it, turn, s)
-        rows.append({"id": it["id"], "ok": ok, "why": why, "tools": [c["name"] for c in turn["tool_calls"]], "usage": turn["usage"],
-                     "stop_reason": turn["stop_reason"]})
+        names = [c["name"] for c in turn["tool_calls"]]
+        # V-15: on a request that should be refused, proposing something instead is a substitution
+        substituted = it["expect"]["kind"] == "refuse" and bool(turn["proposals"])
+        rows.append({"id": it["id"], "ok": ok, "why": why, "tools": names, "usage": turn["usage"],
+                     "stop_reason": turn["stop_reason"], "substituted": substituted})
     return rows
 
 

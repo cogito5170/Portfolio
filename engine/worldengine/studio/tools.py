@@ -10,7 +10,9 @@ from __future__ import annotations
 import copy
 import json
 
-from worldengine import concept as CP, constraints as CS, plugins as PL, world as WD
+from pathlib import Path
+
+from worldengine import combine as KB, concept as CP, constraints as CS, interpret as IN, plugins as PL, promote as PR, sandbox as SB, world as WD
 from worldengine.studio import session as SS
 
 AXES = list(WD.AXES)
@@ -54,9 +56,27 @@ TOOLS = [
      "input_schema": _obj({"plugin": {"type": "string", "enum": ["image_svg", "plotter"]}}, ["plugin"])},
     {"name": "request_action", "description": "비용이 크거나 되돌리기 어려운 작업을 요청한다: render_highres, delete_work, publish, drive_device. 실행하지 않고 작가 승인 대기열에 넣는다.",
      "input_schema": _obj({"kind": {"type": "string", "enum": sorted(SS.NEEDS_APPROVAL)}, "why": {"type": "string"}}, ["kind", "why"])},
-    {"name": "cannot_do", "description": "할 수 없는 요청일 때 부른다. 비슷한 다른 것으로 바꿔치기하지 말고, 못 하는 이유와 대안을 적는다.",
-     "input_schema": _obj({"request": {"type": "string"}, "reason": {"type": "string"}, "alternatives": {"type": "array", "items": {"type": "string"}}},
-                          ["request", "reason", "alternatives"])},
+    {"name": "cannot_do", "description": "할 수 없는 요청일 때 부른다. 비슷한 다른 것으로 바꿔치기하지 말고, 못 하는 이유와 대안을 적는다. kind 는 못 하는 이유의 종류.",
+     "input_schema": _obj({"request": {"type": "string"}, "reason": {"type": "string"}, "alternatives": {"type": "array", "items": {"type": "string"}},
+                           "kind": {"type": "string", "enum": ["medium_missing", "hardware_missing", "capability_missing", "policy", "other"]}},
+                          ["request", "reason", "alternatives", "kind"])},
+    {"name": "propose_interpretations", "description": "철학·건축·작가의 개념을 실행 가능한 규칙으로 옮기는 해석 카드 2~3개를 시안으로 낸다. 각 해석은 근거(basis)와 규칙(축 값, 선택: 움직일 몸 id 와 행동)을 가진다. 출처를 정직하게.",
+     "input_schema": _obj({"concept": _obj({"id": {"type": "string"}, "title": {"type": "string"}, "statement": {"type": "string"},
+                                            "sources": {"type": "array", "items": _obj({"who": {"type": "string"}, "kind": {"type": "string", "enum": ["quote", "paraphrase", "own", "interview"]},
+                                                                                         "where": {"type": "string"}}, ["who", "kind", "where"])}}, ["id", "title", "statement", "sources"]),
+                           "readings": {"type": "array", "items": _obj({"label": {"type": "string"}, "reading": {"type": "string"}, "basis": {"type": "string"},
+                                                                         "axes": _obj({a: {"type": "number"} for a in AXES}, []),
+                                                                         "behavior": {"type": "string", "enum": ["none", "spin", "bob", "orbit"]},
+                                                                         "drives": {"type": "array", "items": {"type": "string"}}}, ["label", "reading", "basis", "axes"])},
+                           "why": {"type": "string"}}, ["concept", "readings", "why"])},
+    {"name": "propose_combination", "description": "지금 세계와 다른 세계를 결합하자고 제안한다(평균 내지 않는다). bodies: juxtapose(나란히)·layer(겹침)·seam(경계)·viewpoint(아이 눈높이엔 B, 어른엔 A). other: 저장소의 세계 파일 이름(예: ref_festival_baroque).",
+     "input_schema": _obj({"other": {"type": "string"}, "bodies": {"type": "string", "enum": ["juxtapose", "layer", "seam", "viewpoint"]},
+                           "opposites": {"type": "array", "items": _obj({"a": {"type": "string"}, "b": {"type": "string"}}, ["a", "b"])},
+                           "why": {"type": "string"}}, ["other", "bodies", "opposites", "why"])},
+    {"name": "run_code", "description": "기존 도구로 안 되는 것을 표준 라이브러리 Python 코드로 시험한다. 네트워크 없음·임시 폴더만 쓰기·시간과 메모리 제한이 걸린 샌드박스에서 돈다. 입력은 input.json 의 world, 마지막 줄에 JSON 을 출력한다. 세계는 바뀌지 않는다.",
+     "input_schema": _obj({"code": {"type": "string"}, "purpose": {"type": "string"}}, ["code", "purpose"])},
+    {"name": "propose_plugin", "description": "run_code 로 시험한 생성기 코드를 작가의 플러그인으로 등록하자고 제안한다. 코드는 translate/generate/self_assess/ports 네 함수를 정의한다. 적합성 시험을 통과해야 승인 대기열에 들어간다.",
+     "input_schema": _obj({"name": {"type": "string"}, "code": {"type": "string"}, "why": {"type": "string"}}, ["name", "code", "why"])},
 ]
 for t in TOOLS:
     t["strict"] = True
@@ -165,7 +185,49 @@ def run(s: SS.Session, name: str, inp: dict) -> dict:
         return s.request(inp["kind"], {}, inp["why"])
     if name == "cannot_do":
         s.log.append(("cannot_do", inp["request"]))
+        if s.ledger is not None:
+            s.ledger.record(s.last_request or inp["request"], "N5", inp.get("kind", "other"), inp["reason"], inp["alternatives"])
         return {"ok": True, "recorded": True, "shown_to_artist": {"request": inp["request"], "reason": inp["reason"], "alternatives": inp["alternatives"]}}
+    if name == "propose_interpretations":
+        rs = inp["readings"]
+        if not 2 <= len(rs) <= 3:
+            return {"ok": False, "error": "해석은 2~3개 (CT-02)"}
+        set_id = "v%d" % (len(s.variant_sets) + 1)
+        out = []
+        for rd in rs:
+            r = s.propose(IN.apply_reading(w, inp["concept"], rd), "%s — %s (근거: %s)" % (rd["label"], rd["reading"], rd["basis"]), "variant",
+                          {"variant_set": set_id, "label": rd["label"], "interpretation": rd})
+            out.append({"label": rd["label"], **r})
+        s.variant_sets.append({"id": set_id, "why": inp["why"], "proposals": [o["proposal"] for o in out if o.get("ok")], "base": s.versions[-1]["n"]})
+        return {"ok": True, "variant_set": set_id, "variants": out, "note": "해석 카드: 작가가 하나를 고르거나 고친다"}
+    if name == "propose_combination":
+        f = Path(__file__).resolve().parents[2] / "worlds" / (Path(inp["other"]).name.replace(".world.json", "") + ".world.json")
+        if not f.exists():
+            return {"ok": False, "error": "세계 %r 가 없다" % inp["other"]}
+        other = WD.load(f)
+        C = KB.combine(w, other, {"bodies": inp["bodies"]}, opposites=inp["opposites"])
+        rec = KB.recognisability(C, w, other)
+        r = s.propose(C, inp["why"], "combination")
+        if r.get("ok"):
+            r["recognisability"] = rec
+        return r
+    if name == "run_code":
+        res = SB.run(inp["code"], inputs={"world": w})
+        s.log.append(("run_code", inp["purpose"], res.get("ran")))
+        keep = {k: res.get(k) for k in ("ran", "exit", "killed", "result", "reason")}
+        keep["stdout_tail"], keep["stderr_tail"] = (res.get("stdout") or "")[-1500:], (res.get("stderr") or "")[-1500:]
+        return {"ok": bool(res.get("ran")), **keep}
+    if name == "propose_plugin":
+        refs = [WD.load(Path(__file__).resolve().parents[2] / "worlds" / (n + ".world.json")) for n in ("ref_yeobaek", "ref_festival_baroque", "ref_modulor")]
+        try:
+            chk = PR.check(inp["code"], inp["name"], refs)
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        if not chk["ok"]:
+            return {"ok": False, "error": chk["reason"], "conformance": [{k: x[k] for k in ("world", "clause", "ok", "detail")} for x in chk["rows"]]}
+        r = s.request("promote_plugin", {"name": inp["name"], "code": inp["code"], "rows": [{k: x[k] for k in ("world", "clause", "ok")} for x in chk["rows"]]}, inp["why"])
+        r["conformance"] = "%d/%d 통과" % (len(chk["rows"]), len(chk["rows"]))
+        return r
     return {"ok": False, "error": "모르는 도구: %s" % name}
 
 

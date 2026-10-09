@@ -152,6 +152,7 @@ function checkExperience(w, bad) {
   const walk = (es, path) => (es || []).forEach((e, i) => {
     if (!e || typeof e !== 'object') return;
     const q = `${path}[${i}]`;
+    if ('eye_only' in e && !['child', 'adult'].includes(e.eye_only)) bad.push(`${q}.eye_only must be child|adult`);
     if (e.type === 'sound' && !(typeof e.caption === 'string' && e.caption)) bad.push(`${q} is a sound without caption (소리마다 자막이 필요하다)`);
     if (e.type === 'character' && !(Array.isArray(e.lines) && e.lines.length && e.lines.every(x => typeof x === 'string' && x))) bad.push(`${q}.lines must be a non-empty list of strings (대사가 곧 자막이다)`);
     (e.triggers || []).forEach((tr, k) => {

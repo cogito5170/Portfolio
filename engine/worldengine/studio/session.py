@@ -22,11 +22,12 @@ NEEDS_APPROVAL = {
     "delete_work": "작품(모든 판) 삭제 — 되돌릴 수 없다",
     "publish": "외부 공개 — 링크를 받은 누구나 본다",
     "drive_device": "실제 장치 구동 — 물리적으로 움직인다",
+    "promote_plugin": "새 플러그인 등록 — 샌드박스·적합성 시험을 통과한 코드를 작가의 플러그인으로 남긴다",
 }
 
 
 class Session:
-    def __init__(self, world: dict, executors: "dict | None" = None):
+    def __init__(self, world: dict, executors: "dict | None" = None, ledger=None):
         bad = WD.check(world)
         if bad:
             raise ValueError("invalid world: " + "; ".join(bad[:3]))
@@ -35,6 +36,8 @@ class Session:
         self._ids = itertools.count(1)
         self.executors = executors or {}          # kind -> callable(session, args) ; run only by approve()
         self.log = []                             # what ran, for tests and the artist
+        self.ledger = ledger                      # N-05: unmet requests (private)
+        self.last_request = ""
 
     # ---------------------------------------------------------------- versions
     @property

@@ -108,4 +108,11 @@ export const selftests = {
   async lowspec(eng) {
     return { lowspec: eng.lowspec, pixel_ratio: eng.renderer.getPixelRatio(), shadows: eng.renderer.shadowMap.enabled, env: eng.scene.environment !== null };
   },
+  // K-04: in a viewpoint combination, a child's eye sees world B and an adult's eye sees world A.
+  async viewpoint(eng) {
+    const count = () => { let a = 0, b = 0; for (const o of eng.eyeOnly) if (o.visible) (o.userData.entity.eye_only === 'adult' ? a++ : b++); return { adult_world: a, child_world: b }; };
+    eng.setMode('walk'); eng.setEye('adult'); eng.step(1 / 60, false); const adult = count();
+    eng.setEye('child'); eng.step(1 / 60, false); const child = count();
+    return { total: eng.eyeOnly.length, adult, child };
+  },
 };
