@@ -16,6 +16,7 @@ try {
   eng.selftest = P.get('selftest') || 'editor';            // controls on, also when headless
   eng.registry.use(core, eng.mats).use(retail, eng.mats).use(robot, eng.mats).use(character, eng.mats);
   const studio = P.get('studio') ? { base: '', token: P.get('t') || '' } : null;
+  if (studio) eng.assets.template = '/api/asset/{name}?t=' + encodeURIComponent(studio.token);   // the artist's own files (E-02)
   const url = studio ? '/api/world.json?t=' + encodeURIComponent(studio.token) : (P.get('world') || '../worlds/contradiction_garden.world.json');
   const res = await fetch(url);
   if (!res.ok) throw new Error(`world ${url}: HTTP ${res.status}`);
@@ -31,9 +32,10 @@ try {
     b.onclick = async () => { ed.doc.replace(d.world, '임시 저장본'); await ed.reload(); ed.render(); b.remove(); };
     document.getElementById('bar').append(b);
   }
-  if (P.get('selftest') === 'editor' || P.get('selftest') === 'editor_save') {
+  const ST = P.get('selftest');
+  if (['editor', 'editor_save', 'editor_import'].includes(ST)) {
     const T = await import('./selftest.js');
-    report(P.get('selftest') === 'editor' ? await T.editorSelftest(ed, eng) : await T.editorSaveTest(ed));
+    report(await { editor: () => T.editorSelftest(ed, eng), editor_save: () => T.editorSaveTest(ed), editor_import: () => T.editorImportTest(ed, eng) }[ST]());
   }
   if (HEADLESS) eng.step(0);
   else eng.start({ autoLowSpec: false });

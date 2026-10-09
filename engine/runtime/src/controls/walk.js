@@ -2,9 +2,13 @@
 // The kinematics are a pure function (step) so node can test them without a browser.
 
 // state = {x, y, yaw, pitch, eye}   yaw: radians from +x (east) counter-clockwise; pitch: radians, + looks up.
-// input = {fwd, strafe} in [-1,1] (strafe + = right), run: bool.
-// opts  = {speed m/s, run_factor, radius m, bounds: {min:[x,y], max:[x,y]}|null, colliders: [[x0,y0,x1,y1,ztop],...]}
+// input = {fwd, strafe, up} in [-1,1] (strafe + = right, up + = rise; up is used when flying), run: bool.
+// opts  = {speed m/s, run_factor, radius m, bounds: {min:[x,y], max:[x,y]}|null, colliders: [[x0,y0,x1,y1,ztop],...],
+//          fly: bool, fly_speed m/s, z_max m}
+// Flying (XR-02): forward follows the gaze (pitch included), up/down moves straight up or down, nothing blocks;
+// the eye stays between 0.3 m and z_max, and inside the bounds.
 export function step(state, input, dt, opts = {}) {
+  if (opts.fly) return flyStep(state, input, dt, opts);
   const speed = (opts.speed ?? 1.4) * (input.run ? (opts.run_factor ?? 2.2) : 1);
   let f = input.fwd || 0, s = input.strafe || 0;
   const n = Math.hypot(f, s); if (n > 1) { f /= n; s /= n; }
@@ -20,6 +24,18 @@ export function step(state, input, dt, opts = {}) {
     y = Math.min(opts.bounds.max[1] - r, Math.max(opts.bounds.min[1] + r, y));
   }
   return { ...state, x, y };
+}
+
+function flyStep(state, input, dt, opts) {
+  const speed = (opts.fly_speed ?? 4) * (input.run ? (opts.run_factor ?? 2.2) : 1);
+  let f = input.fwd || 0, s = input.strafe || 0;
+  const n = Math.hypot(f, s); if (n > 1) { f /= n; s /= n; }
+  const cy = Math.cos(state.yaw), sy = Math.sin(state.yaw), cp = Math.cos(state.pitch), sp = Math.sin(state.pitch);
+  let x = state.x + (f * cy * cp + s * sy) * speed * dt, y = state.y + (f * sy * cp - s * cy) * speed * dt;
+  let z = state.eye + (f * sp + Math.max(-1, Math.min(1, input.up || 0))) * speed * dt;
+  z = Math.min(opts.z_max ?? 200, Math.max(0.3, z));
+  if (opts.bounds) { x = Math.min(opts.bounds.max[0], Math.max(opts.bounds.min[0], x)); y = Math.min(opts.bounds.max[1], Math.max(opts.bounds.min[1], y)); }
+  return { ...state, x, y, eye: z };
 }
 
 export function look(state, dYaw, dPitch) {
@@ -59,7 +75,8 @@ export class WalkControls {
     const k = c => this.keys.has(c) ? 1 : 0;
     let fwd = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown'), strafe = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft');
     if (this.joy) { const v = this.joy.value(); fwd += v.y; strafe += v.x; }
-    return { fwd, strafe, run: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || (this.joy && this.joy.magnitude() > 0.95) };
+    const up = k('KeyE') + k('Space') + (this.vert || 0) - k('KeyQ') - k('ControlLeft');
+    return { fwd, strafe, up, run: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || (this.joy && this.joy.magnitude() > 0.95) };
   }
   update(dt) { if (this.enabled && this.state) this.state = step(this.state, this.input(), dt, this.opts); return this.state; }
   dispose() {

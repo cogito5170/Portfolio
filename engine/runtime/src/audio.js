@@ -3,7 +3,8 @@
 // when it starts, so a visitor without sound still gets it (XR-11).
 //
 // sound entity: {type: "sound", caption, recipe: "tone"|"chord"|"noise"|"pulse", freq, freqs, wave, rate,
-//                volume (0..1, default from the world's sound axis), ref_distance, max_distance, autoplay (default true)}
+//                volume (0..1, default from the world's sound axis), ref_distance, max_distance, autoplay (default true),
+//                src: "asset:<name>" (the artist's own recording, E-02: played, looped, instead of the recipe), loop}
 import * as THREE from 'three';
 
 export class AudioManager {
@@ -29,7 +30,8 @@ export class AudioManager {
     const c = this.ctx, out = c.createGain();
     const osc = (f, type) => { const o = c.createOscillator(); o.type = type || 'sine'; o.frequency.value = f; o.connect(out); o.start(); return o; };
     const r = spec.recipe || 'tone';
-    if (r === 'tone') osc(spec.freq || 220, spec.wave);
+    if (spec.src) this._file(spec, out);
+    else if (r === 'tone') osc(spec.freq || 220, spec.wave);
     else if (r === 'chord') for (const f of spec.freqs || [220, 277, 330]) osc(f, spec.wave);
     else if (r === 'noise') {
       const b = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = b.getChannelData(0);
@@ -46,6 +48,24 @@ export class AudioManager {
     pan.refDistance = spec.ref_distance ?? 1.5; pan.maxDistance = spec.max_distance ?? 40; pan.rolloffFactor = 1.2;
     out.connect(vol); vol.connect(pan); pan.connect(this.master);
     return { pan, vol };
+  }
+
+  // The artist's recording: decoded in this browser, played through the same panner. Not readable here -> caption says so.
+  _file(spec, out) {
+    const url = this.eng.assets && this.eng.assets.url(spec.src);
+    this.files = this.files || { decoded: 0, failed: 0, seconds: [] }; this.pending = this.pending || [];
+    if (!url) { this.files.failed++; this.eng.caption('♪ ' + spec.caption + ' (이 페이지에서는 파일을 들을 수 없어요)'); return; }
+    const p = this.decode(url).then(buf => {
+      const n = this.ctx.createBufferSource(); n.buffer = buf; n.loop = spec.loop !== false; n.connect(out); n.start();
+      this.files.decoded++; this.files.seconds.push(+buf.duration.toFixed(3));
+    }).catch(() => { this.files.failed++; this.eng.caption('♪ ' + spec.caption + ' (파일을 열지 못했어요)'); });
+    this.pending.push(p); return p;
+  }
+  // Decoded on an offline context: the buffer plays on the live one all the same, and decoding does not wait for the
+  // live context to be allowed to run (headless browsers never resolve that wait).
+  decode(url, rate = this.ctx ? this.ctx.sampleRate : 48000) {
+    return fetch(url).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+      .then(b => new OfflineAudioContext(1, 1, rate).decodeAudioData(b));
   }
 
   start(s) {

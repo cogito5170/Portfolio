@@ -48,6 +48,8 @@ Tag `r170` = commit `beab9e845f9e5ae11d648f55b24a0e910b56a85a`. All files are by
 | `examples/jsm/shaders/OutputShader.js` | `289ac10088f0924fe0d8507d5c74e7f349bc5308` |
 | `examples/jsm/exporters/GLTFExporter.js` | `4661958d176c38ccacc45b24ab014cf441c0068c` |
 | `examples/jsm/webxr/VRButton.js` | `10c362eb86a867ea2e211de4b82d6830808b9518` |
+| `examples/jsm/loaders/GLTFLoader.js` | `af826a55d33d38d723ba509b52303594f44a025e` |
+| `examples/jsm/utils/BufferGeometryUtils.js` | `cc3e4ef8ea6f15c52e7cf132b7292632f6dcad10` |
 
 ## Not copied, used in place
 

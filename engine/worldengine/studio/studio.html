@@ -29,7 +29,8 @@ const T = new URLSearchParams(location.search).get('t') || '';
 const api = (p, body) => fetch('/api/' + p + (p.includes('?') ? '&' : '?') + 't=' + encodeURIComponent(T), body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}).then(r => r.json());
 const log = document.getElementById('log'), err = document.getElementById('err'), view = document.getElementById('view');
 let images = [];
-const show = (src) => { view.src = '/runtime/index.html?world=' + encodeURIComponent(src + (src.includes('?') ? '&' : '?') + 't=' + T); };
+const ASSETS = encodeURIComponent('/api/asset/{name}?t=' + encodeURIComponent(T));     // the artist's own imported files (E-02)
+const show = (src) => { view.src = '/runtime/index.html?world=' + encodeURIComponent(src + (src.includes('?') ? '&' : '?') + 't=' + T) + '&assets=' + ASSETS; };
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const bubble = (who, text) => { const m = el('div', 'msg ' + who, text); log.appendChild(m); log.scrollTop = 1e9; };
 const AXKO = { density: '밀도', colour: '색', form: '형태', texture: '질감', motion: '움직임', sound: '소리', narrative: '서사' };

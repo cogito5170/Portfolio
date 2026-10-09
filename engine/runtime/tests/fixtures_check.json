@@ -69,7 +69,7 @@
     "eye": "giant"
    },
    "controls": {
-    "default": "fly"
+    "default": "swim"
    }
   }
  },
@@ -743,6 +743,143 @@
       "enabled": "off"
      }
     ]
+   }
+  }
+ },
+ {
+  "name": "media ok",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [
+    {
+     "type": "model",
+     "src": "asset:chair (2).glb"
+    },
+    {
+     "type": "sound",
+     "caption": "비",
+     "src": "asset:rain.wav"
+    },
+    {
+     "type": "box",
+     "material": {
+      "image": "asset:a.jpg"
+     },
+     "behaviors": [
+      {
+       "type": "react",
+       "input": "mic"
+      },
+      {
+       "type": "spin"
+      }
+     ]
+    }
+   ],
+   "environment": {
+    "bloom": {
+     "strength": 1.2,
+     "radius": 0.4,
+     "threshold": 0.8
+    },
+    "lod": {
+     "distance_m": 30
+    }
+   },
+   "controls": {
+    "default": "fly"
+   },
+   "materials": {
+    "pic": {
+     "image": "asset:벽 그림.png"
+    }
+   }
+  }
+ },
+ {
+  "name": "media bad",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [
+    {
+     "type": "model",
+     "src": "http://evil/x.glb"
+    },
+    {
+     "type": "model",
+     "src": "asset:../up"
+    },
+    {
+     "type": "model",
+     "src": 7
+    },
+    {
+     "type": "box",
+     "material": {
+      "image": "x.png"
+     },
+     "behaviors": [
+      {
+       "type": "react",
+       "input": "heartbeat"
+      },
+      {
+       "type": "react"
+      }
+     ],
+     "children": [
+      {
+       "type": "sound",
+       "caption": "c",
+       "src": "file:///etc/passwd"
+      }
+     ]
+    }
+   ],
+   "environment": {
+    "bloom": {
+     "strength": 9,
+     "threshold": -1
+    },
+    "lod": {
+     "distance_m": 0
+    }
+   },
+   "controls": {
+    "default": "swim"
+   },
+   "materials": {
+    "pic": {
+     "image": "https://example.com/x.png"
+    }
+   }
+  }
+ },
+ {
+  "name": "bloom and lod switches",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [],
+   "environment": {
+    "bloom": false,
+    "lod": false
+   }
+  }
+ },
+ {
+  "name": "bloom wrong type",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [],
+   "environment": {
+    "bloom": [
+     1
+    ],
+    "lod": 5
    }
   }
  }

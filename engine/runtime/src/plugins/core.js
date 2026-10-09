@@ -6,6 +6,7 @@ import { fallHeight } from '../physics.js';
 
 const UP = g => g.rotateX(Math.PI / 2);                  // three primitives are Y-up; turn them to Z-up
 const mesh = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; return m; };
+const seg = (c, n, lo = 6) => Math.max(lo, Math.round(n * (c.detail ?? 1)));   // c.detail < 1: the engine's far LOD level
 const sz = (e, d) => [].concat(e.size ?? d).length === 1 ? [e.size, e.size, e.size] : [].concat(e.size ?? d);
 
 function textTexture(text, w, h, bg, fg) {
@@ -31,23 +32,28 @@ export const core = {
     },
     cylinder: {
       doc: 'vertical cylinder', fields: { radius: 'm', radius_top: 'm (default = radius)', height: 'm', segments: 'int' },
-      build(e, c) { const h = e.height ?? 1, r = e.radius ?? 0.5; const g = UP(new THREE.CylinderGeometry(e.radius_top ?? r, r, h, e.segments || 48)); g.translate(0, 0, h / 2); return mesh(g, c.mats.get(e.material)); },
+      lod: true,
+      build(e, c) { const h = e.height ?? 1, r = e.radius ?? 0.5; const g = UP(new THREE.CylinderGeometry(e.radius_top ?? r, r, h, seg(c, e.segments || 48))); g.translate(0, 0, h / 2); return mesh(g, c.mats.get(e.material)); },
     },
     cone: {
       doc: 'vertical cone', fields: { radius: 'm', height: 'm' },
-      build(e, c) { const h = e.height ?? 1; const g = UP(new THREE.ConeGeometry(e.radius ?? 0.5, h, e.segments || 48)); g.translate(0, 0, h / 2); return mesh(g, c.mats.get(e.material)); },
+      lod: true,
+      build(e, c) { const h = e.height ?? 1; const g = UP(new THREE.ConeGeometry(e.radius ?? 0.5, h, seg(c, e.segments || 48))); g.translate(0, 0, h / 2); return mesh(g, c.mats.get(e.material)); },
     },
     sphere: {
       doc: 'sphere resting on pos', fields: { radius: 'm' },
-      build(e, c) { const r = e.radius ?? 0.5; const g = new THREE.SphereGeometry(r, 48, 32); g.translate(0, 0, r); return mesh(g, c.mats.get(e.material)); },
+      lod: true,
+      build(e, c) { const r = e.radius ?? 0.5; const g = new THREE.SphereGeometry(r, seg(c, 48), seg(c, 32, 4)); g.translate(0, 0, r); return mesh(g, c.mats.get(e.material)); },
     },
     capsule: {
       doc: 'vertical capsule', fields: { radius: 'm', height: 'total height m' },
-      build(e, c) { const r = e.radius ?? 0.3, h = Math.max(e.height ?? 1.5, 2 * r); const g = UP(new THREE.CapsuleGeometry(r, h - 2 * r, 8, 24)); g.translate(0, 0, h / 2); return mesh(g, c.mats.get(e.material)); },
+      lod: true,
+      build(e, c) { const r = e.radius ?? 0.3, h = Math.max(e.height ?? 1.5, 2 * r); const g = UP(new THREE.CapsuleGeometry(r, h - 2 * r, seg(c, 8, 2), seg(c, 24))); g.translate(0, 0, h / 2); return mesh(g, c.mats.get(e.material)); },
     },
     torus: {
       doc: 'torus lying flat (rot to stand it up)', fields: { radius: 'm', tube: 'm', arc_deg: 'deg (default 360)' },
-      build(e, c) { const t = e.tube ?? 0.1; const g = new THREE.TorusGeometry(e.radius ?? 0.5, t, 24, 96, (e.arc_deg ?? 360) * Math.PI / 180); g.translate(0, 0, t); return mesh(g, c.mats.get(e.material)); },
+      lod: true,
+      build(e, c) { const t = e.tube ?? 0.1; const g = new THREE.TorusGeometry(e.radius ?? 0.5, t, seg(c, 24), seg(c, 96, 12), (e.arc_deg ?? 360) * Math.PI / 180); g.translate(0, 0, t); return mesh(g, c.mats.get(e.material)); },
     },
     plane: {
       doc: 'horizontal surface at pos.z (floors); textures tile by size_m', fields: { size: '[sx,sy] m' },
@@ -115,11 +121,31 @@ export const core = {
     },
     sound: {
       doc: 'a sound source in space (no audio files); starts only after the visitor touches/clicks once; caption required',
-      fields: { caption: 'str (required)', recipe: 'tone|chord|noise|pulse', freq: 'Hz', freqs: '[Hz]', wave: 'sine|square|sawtooth|triangle', rate: 'Hz (pulse)', volume: '0..1', visible: 'bool' },
+      fields: { caption: 'str (required)', src: 'asset name (audio file, plays instead of the recipe)', recipe: 'tone|chord|noise|pulse', freq: 'Hz', freqs: '[Hz]', wave: 'sine|square|sawtooth|triangle', rate: 'Hz (pulse)', volume: '0..1', visible: 'bool' },
       build(e, c) {
         const g = new THREE.Group();
         if (e.visible !== false) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x9fe8ff, emissiveIntensity: 1.5 })); g.add(m); }
         if (c.audio) c.audio.register(g, e);
+        return g;
+      },
+    },
+    model: {
+      doc: 'imported 3D model (glTF binary, E-02) standing on pos; a see-through grey box stands in until it loads, or where this page may not read the file',
+      fields: { src: 'asset name (.glb)', fit_m: 'largest side m (default: as made)' },
+      build(e, c) {
+        const g = new THREE.Group(), s = e.fit_m ?? 1;
+        const ph = mesh(new THREE.BoxGeometry(s, s, s).translate(0, 0, s / 2), new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 0.9, transparent: true, opacity: 0.45 }));
+        ph.userData.placeholder = true; g.add(ph);
+        const url = c.assets && c.assets.url(e.src);
+        if (url) c.pending.push(import('three/addons/loaders/GLTFLoader.js').then(({ GLTFLoader }) => new GLTFLoader().loadAsync(url)).then(gl => {
+          const m = gl.scene; m.rotation.x = Math.PI / 2;                 // glTF is y-up; the world is z-up
+          const wrap = new THREE.Group(); wrap.add(m); wrap.updateMatrixWorld(true);
+          const b = new THREE.Box3().setFromObject(wrap), size = b.getSize(new THREE.Vector3());
+          const k = e.fit_m ? e.fit_m / Math.max(size.x, size.y, size.z, 1e-6) : 1;
+          wrap.scale.setScalar(k); wrap.position.set(-(b.min.x + b.max.x) / 2 * k, -(b.min.y + b.max.y) / 2 * k, -b.min.z * k);
+          m.traverse(o => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
+          g.remove(ph); ph.geometry.dispose(); ph.material.dispose(); g.add(wrap); g.userData.loaded = true; c.assets.loaded.push(e.src);
+        }).catch(err => { c.assets.missing.add(String(e.src).slice(6)); console.warn('model', e.src, err && err.message); }));
         return g;
       },
     },
@@ -146,6 +172,17 @@ export const core = {
     orbit(o, b, t) {
       const c = b.center || [o.userData.base.pos.x, o.userData.base.pos.y], r = b.radius ?? 1, a = 2 * Math.PI * t / (b.period_s ?? 8);
       o.position.x = c[0] + r * Math.cos(a); o.position.y = c[1] + r * Math.sin(a); if (b.face) o.rotation.z = a + Math.PI / 2;
+    },
+    // M-03: a live input level in [0,1] (eng.inputs; 0 until the visitor turns the device on) changes the body.
+    react(o, b, t, dt, eng) {
+      const v = (eng && eng.inputs && eng.inputs.levels[b.input]) || 0, a = b.amount ?? 1;
+      const base = (o.userData.baseScale ||= o.scale.clone());
+      if ((b.prop || 'scale') === 'scale') o.scale.copy(base).multiplyScalar(1 + a * v);
+      else if (b.prop === 'lift') o.position.z = o.userData.base.pos.z + a * v;
+      else if (b.prop === 'glow') o.traverse(m => { if (m.material && 'emissiveIntensity' in m.material) {
+        if (m.userData.glow0 === undefined) m.userData.glow0 = m.material.emissiveIntensity;
+        m.material.emissiveIntensity = m.userData.glow0 + 4 * a * v; } });
+      o.userData.reactLevel = v;
     },
   },
 };

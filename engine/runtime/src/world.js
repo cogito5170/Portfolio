@@ -63,11 +63,44 @@ export function check(w, knownTypes = null) {
   checkRules(w, bad);
   checkExperience(w, bad);
   const mode = w.controls && w.controls.default;
-  if (mode !== undefined && !['orbit', 'walk'].includes(mode)) bad.push(`controls.default must be orbit|walk: "${mode}"`);
+  if (mode !== undefined && !CONTROL_MODES.includes(mode)) bad.push(`controls.default must be ${CONTROL_MODES.join('|')}: "${mode}"`);
+  checkMedia(w, bad);
   return bad;
 }
 
 export const SOURCE_KINDS = ['quote', 'paraphrase', 'own', 'interview'];
+export const CONTROL_MODES = ['orbit', 'walk', 'fly'];
+export const INPUTS = ['mic', 'camera'];
+// Imported files (E-02) are named, never addressed: "asset:<name>". Where the bytes come from is the runtime's
+// business (the artist's private folder through the studio, or a copy made by an approved publish).
+export const ASSET_RE = /^asset:[\w가-힣][\w가-힣 .()-]{0,120}$/;
+
+// Post-processing, LOD, imported media and live inputs: same rules and messages as world.py _check_media.
+function checkMedia(w, bad) {
+  const env = w.environment;
+  if (env && typeof env === 'object' && !Array.isArray(env)) {
+    const b = env.bloom;
+    if (b !== undefined && b !== null && b !== false) {
+      if (typeof b !== 'object' || Array.isArray(b)) bad.push('environment.bloom must be an object or false');
+      else for (const [k, lo, hi] of [['strength', 0, 5], ['radius', 0, 1], ['threshold', 0, 1]])
+        if (b[k] !== undefined && !(isNum(b[k]) && b[k] >= lo && b[k] <= hi)) bad.push(`environment.bloom.${k} must be in [${lo},${hi}]: ${JSON.stringify(b[k])}`);
+    }
+    const l = env.lod;
+    if (l !== undefined && l !== null && l !== false && !(typeof l === 'object' && !Array.isArray(l) && (l.distance_m === undefined || (isNum(l.distance_m) && l.distance_m > 0))))
+      bad.push('environment.lod must be false or {distance_m > 0}');
+  }
+  for (const [name, m] of Object.entries(w.materials || {}))
+    if (m && typeof m === 'object' && m.image !== undefined && !ASSET_RE.test(m.image)) bad.push(`materials.${name}.image must be "asset:<name>": ${JSON.stringify(m.image)}`);
+  const walk = (es, path) => (es || []).forEach((e, i) => {
+    if (!e || typeof e !== 'object') return;
+    const q = `${path}[${i}]`;
+    if (e.src !== undefined && !(typeof e.src === 'string' && ASSET_RE.test(e.src))) bad.push(`${q}.src must be "asset:<name>" (imported files are named, not linked): ${JSON.stringify(e.src)}`);
+    if (e.material && typeof e.material === 'object' && e.material.image !== undefined && !ASSET_RE.test(e.material.image)) bad.push(`${q}.material.image must be "asset:<name>": ${JSON.stringify(e.material.image)}`);
+    (e.behaviors || []).forEach((b, k) => { if (b && b.type === 'react' && !INPUTS.includes(b.input)) bad.push(`${q}.behaviors[${k}].input must be ${INPUTS.join('|')}: ${JSON.stringify(b.input ?? null)}`); });
+    if (Array.isArray(e.children)) walk(e.children, q + '.children');
+  });
+  walk(w.entities, 'entities');
+}
 
 // Concept cards (the Concept ingredient): same rules and messages as world.py _check_concepts.
 function checkConcepts(w, ids, bad) {

@@ -52,18 +52,36 @@ export function hud(eng) {
     if (new URLSearchParams(location.search).has('card')) card.hidden = false;   // link that opens on the concept card
   }
   for (const t of eng.world.tours || []) btn('투어' + ((eng.world.tours.length > 1) ? ' · ' + (t.title || t.id) : ''), () => eng.startTour(t.id));
+  for (const kind of eng.inputsWanted || []) {                          // M-03: opt-in, says when it is on
+    const name = kind === 'mic' ? '마이크' : '카메라', b = btn(name + ' 켜기', async () => {
+      if (eng.inputs.on[kind]) eng.inputs.disable(kind); else await eng.inputs.enable(kind);
+    });
+    eng.on('inputs', () => { const on = !!eng.inputs.on[kind]; b.textContent = name + (on ? ' 끄기' : ' 켜기'); b.setAttribute('aria-pressed', on); refresh(); });
+  }
   btn('glTF', async () => { const { downloadGLB } = await import('../export.js'); downloadGLB(eng); });   // XR-10: take it to Blender/Unity/Godot
-  const bOrbit = btn('둘러보기', () => eng.setMode('orbit')), bWalk = btn('걷기', () => eng.setMode('walk'));
+  const bOrbit = btn('둘러보기', () => eng.setMode('orbit')), bWalk = btn('걷기', () => eng.setMode('walk')), bFly = btn('날기', () => eng.setMode('fly'));
+  const hold = (label, v) => {                                      // press and hold to rise / sink (XR-02 fly)
+    const b = btn(label, () => {}); b.setAttribute('aria-label', v > 0 ? '위로' : '아래로');
+    const on = e => { e.preventDefault(); if (eng.walk) eng.walk.vert = v; }, off = () => { if (eng.walk) eng.walk.vert = 0; };
+    b.addEventListener('pointerdown', on); for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, off);
+    return b;
+  };
+  const bUp = hold('▲', 1), bDown = hold('▼', -1);
   const bAdult = btn('어른 눈높이', () => eng.setEye('adult')), bChild = btn('아이 눈높이', () => eng.setEye('child'));
-  const help = () => eng.mode === 'walk'
+  const help = () => eng.mode === 'fly'
+    ? (touch ? '왼쪽 엄지: 보는 쪽으로 날기 · 오른쪽 끌기: 시선 · ▲▼: 오르내리기' : 'WASD: 보는 쪽으로 날기 · E/Space: 위 · Q/Ctrl: 아래 · 끌기: 시선')
+    : eng.mode === 'walk'
     ? (touch ? '왼쪽 엄지: 이동 · 오른쪽 끌기: 시선 · 끝까지 밀면 달리기' : 'WASD/화살표: 이동 · 끌기: 시선 · Shift: 달리기')
     : (touch ? '한 손가락: 회전 · 두 손가락: 확대/이동' : '끌기: 회전 · 휠: 확대 · 오른쪽 끌기: 이동');
   const refresh = () => {
-    bOrbit.setAttribute('aria-pressed', eng.mode === 'orbit'); bWalk.setAttribute('aria-pressed', eng.mode === 'walk');
+    bOrbit.setAttribute('aria-pressed', eng.mode === 'orbit'); bWalk.setAttribute('aria-pressed', eng.mode === 'walk'); bFly.setAttribute('aria-pressed', eng.mode === 'fly');
+    bUp.hidden = bDown.hidden = eng.mode !== 'fly';
     for (const [b, k] of [[bAdult, 'adult'], [bChild, 'child']]) { b.hidden = eng.mode !== 'walk'; b.setAttribute('aria-pressed', eng.eyeName === k); }
     bAdult.textContent = `어른 ${eng.world.player?.eye_heights?.adult ?? 1.7} m`; bChild.textContent = `아이 ${eng.world.player?.eye_heights?.child ?? 1.1} m`;
-    sel.value = eng.viewName; sel.hidden = eng.mode === 'walk';
+    sel.value = eng.viewName; sel.hidden = eng.mode !== 'orbit';
     top.innerHTML = `<b></b><div class="we-help"></div>`; top.firstChild.textContent = eng.world.name; top.lastChild.textContent = help();
+    for (const k of Object.keys((eng.inputs && eng.inputs.on) || {})) { const d = document.createElement('div'); d.className = 'we-help';
+      d.textContent = `● ${k === 'mic' ? '마이크' : '카메라'} 켜짐 — 이 기기 밖으로 나가지 않고, 저장하지 않아요`; top.appendChild(d); }
     if (eng.presence) { const d = document.createElement('div'); d.className = 'we-help'; d.textContent = `함께 있는 사람 ${eng.presence.count}명 (익명)`; top.appendChild(d); }
     const v = eng.world.verify && eng.world.verify['V-16'];     // a drawing robot world carries its own verification
     if (v) { const d = document.createElement('div'); d.className = 'we-help';
