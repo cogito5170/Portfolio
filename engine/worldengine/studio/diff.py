@@ -29,7 +29,13 @@ def diff(a: dict, b: dict) -> dict:
     other = sorted(k for k in set(a) | set(b) if k not in ("rules", "entities", "materials", "concepts") and a.get(k) != b.get(k))
     ra, rb = dict(a.get("rules") or {}), dict(b.get("rules") or {})
     ra.pop("axes", None); rb.pop("axes", None)
-    return {"axes": axes, "entities_added": added, "entities_removed": removed, "entities_edited": edited,
+    area = None
+    if added or removed or edited:                          # D-04: the floor the bodies cover, when bodies changed
+        from worldengine import footprint as FP
+        fa, fb = FP.area_table(a)["covered_m2"], FP.area_table(b)["covered_m2"]
+        if abs(fa - fb) >= 0.01:
+            area = [fa, fb]
+    return {"area": area, "axes": axes, "entities_added": added, "entities_removed": removed, "entities_edited": edited,
             "materials_changed": mats, "concepts_added": sorted(set(cb) - set(ca)), "concepts_removed": sorted(set(ca) - set(cb)),
             "concepts_edited": sorted(k for k in set(ca) & set(cb) if ca[k] != cb[k]),
             "constraints_changed": ra != rb, "other_fields": other}
@@ -48,6 +54,8 @@ def summary_ko(d: dict) -> "list[str]":
         L.append("제거: " + ", ".join(d["entities_removed"]))
     for k, f in d["entities_edited"].items():
         L.append("수정 %s: %s" % (k, ", ".join(f)))
+    if d.get("area"):
+        L.append("몸이 덮은 바닥 %.2f → %.2f m²" % tuple(d["area"]))
     if d["materials_changed"]:
         L.append("재질: " + ", ".join(d["materials_changed"]))
     if d["concepts_added"]:
