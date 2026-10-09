@@ -113,7 +113,7 @@ class GltfTests(unittest.TestCase):
             print("\nGLTF ref_yeobaek: %d bytes, %d meshes in scene, glb nodes %d meshes %d materials %d triangles %d lights %d"
                   % (r["bytes"], r["scene_meshes"], s["nodes"], s["meshes"], s["materials"], s["triangles"], s["lights"]), file=sys.stderr)
             self.assertGreater(s["meshes"], 0)
-            self.assertGreater(s["triangles"], 0)
+            self.assertGreater(s["triangles"], 2000)                     # full detail, not the far LOD level (was 182 once)
             self.assertEqual(s["problems"], [])
 
 

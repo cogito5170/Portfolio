@@ -6,8 +6,13 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
 export async function exportGLB(eng) {
   eng.step(0, true);                                     // make sure every matrix is current
-  const ex = new GLTFExporter();
-  return ex.parseAsync(eng.scene, { binary: true, onlyVisible: true, maxTextureSize: 2048 });
+  const lods = [];                                       // full detail, whatever the camera's distance (XR-01 LOD)
+  eng.scene.traverse(o => { if (o.isLOD) { lods.push([o, o.levels.map(l => l.object.visible)]); o.levels.forEach((l, i) => { l.object.visible = i === 0; }); } });
+  try {
+    return await new GLTFExporter().parseAsync(eng.scene, { binary: true, onlyVisible: true, maxTextureSize: 2048 });
+  } finally {
+    for (const [o, vis] of lods) o.levels.forEach((l, i) => { l.object.visible = vis[i]; });
+  }
 }
 
 export async function downloadGLB(eng) {
