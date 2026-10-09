@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>세계 편집기</title>
+<style>
+:root{--bg:#f4f1ea;--ink:#1f2328;--sub:#5b616b;--card:#fff;--line:#e3dfd6;--accent:#1b6ef3;--warn:#b54708;--bad:#c4320a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171b;--ink:#e8e6e1;--sub:#a3a8b0;--card:#1e2126;--line:#2c3036;--accent:#7aa7ff;--warn:#f79009;--bad:#ff6b4a}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px/1.45 "Noto Sans KR",system-ui,sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column;height:100dvh}
+#view{flex:0 0 40dvh;position:relative;min-height:0;background:#000;touch-action:none}
+#view canvas{display:block}
+#side{flex:1;display:flex;flex-direction:column;min-height:0;min-width:0}
+@media (min-width:900px){body{flex-direction:row}#view{flex:1 1 auto;height:100dvh}#side{flex:0 0 400px;height:100dvh;border-left:1px solid var(--line)}}
+#bar{display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;border-bottom:1px solid var(--line);align-items:center}
+#status{font-size:13px;color:var(--sub);flex:1 1 100%;min-height:1.2em}
+#tabs{display:flex;overflow-x:auto;border-bottom:1px solid var(--line)}
+#tabs button{border:0;border-radius:0;border-bottom:3px solid transparent;background:none;flex:1 0 auto;margin:0}
+#tabs button[aria-selected="true"]{border-bottom-color:var(--accent);color:var(--accent)}
+#panel{flex:1;overflow:auto;padding:8px 10px calc(16px + env(safe-area-inset-bottom))}
+button{min-height:44px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;margin:2px;cursor:pointer}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button:disabled{opacity:.45}
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-height:44px;max-width:100%}
+input[type=range]{padding:0;border:0;background:none;flex:1;min-width:0}
+input[type=color]{padding:2px;width:52px}
+input[type=checkbox]{min-height:0;width:22px;height:22px}
+textarea{width:100%;min-height:64px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0}
+.card h3{margin:0 0 6px;font-size:15px}
+.row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0}
+.row>label{min-width:72px;font-size:14px;color:var(--sub)}
+.grow{flex:1;min-width:0}
+.num{width:84px}
+.list button.ent{display:block;width:100%;text-align:left;margin:2px 0}
+.list button.ent[aria-current="true"]{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.sub{color:var(--sub);font-size:13px}
+.bad{color:var(--bad)} .warn{color:var(--warn)}
+.chip{display:inline-flex;align-items:center;gap:4px;margin:2px}
+.off{opacity:.55}
+</style>
+<script>window.__err = null; window.__done = false;
+addEventListener('error', e => { if (!window.__done) { window.__err = String(e.message || (e.target && (e.target.src || e.target.href)) || 'load error'); console.log('WE_STATUS:err:' + window.__err); } }, true);</script>
+<script type="importmap">{"imports":{"three":"../vendor/three/build/three.module.js","three/addons/":"../vendor/three/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="view" aria-label="세계 미리보기 (몸을 눌러 고르기)"></div>
+<div id="side">
+  <div id="bar">
+    <button id="undo" type="button" aria-label="되돌리기">↶ 되돌리기</button>
+    <button id="redo" type="button" aria-label="다시 하기">↷</button>
+    <button id="import" type="button">가져오기</button>
+    <button id="export" type="button">내보내기</button>
+    <button id="save" type="button" class="primary" hidden>판으로 저장</button>
+    <input id="file" type="file" accept=".json,application/json" hidden>
+    <div id="status" aria-live="polite"></div>
+  </div>
+  <div id="tabs" role="tablist"></div>
+  <div id="panel" role="tabpanel"></div>
+</div>
+<script type="module" src="./src/editor/boot.js"></script>
+</body>
+</html>

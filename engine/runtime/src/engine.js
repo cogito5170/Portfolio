@@ -52,6 +52,7 @@ export class Engine {
   async load(world, { view, mode, eye } = {}) {
     const bad = W.check(world, this.registry.known());
     if (bad.length) throw new Error('invalid world: ' + bad.slice(0, 5).join('; '));
+    if (this.scene) this._dispose(this.scene);          // reloading (the editor does it on every change): free the old GPU objects
     this.world = world; this.mats.world = world.materials || {}; this.mats.cache.clear();
     this.extent = W.extent(world);
     this.views = { ...W.defaultViews(world), ...(world.views || {}) };
@@ -83,7 +84,8 @@ export class Engine {
     this.renderer.toneMappingExposure = env.exposure ?? 0.88;
     if (env.env_map !== null) {
       const pm = new THREE.PMREMGenerator(this.renderer);
-      s.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; s.environmentIntensity = env.env_intensity ?? 0.55;
+      const room = new RoomEnvironment();
+      this._envRT = pm.fromScene(room, 0.04); s.environment = this._envRT.texture; s.environmentIntensity = env.env_intensity ?? 0.55; pm.dispose(); room.dispose();
     }
     if (env.fog) s.fog = new THREE.FogExp2(new THREE.Color(env.fog.color || env.background || '#f4f1ea'), env.fog.density ?? 0.02);
     s.add(new THREE.HemisphereLight(0xfffaf0, 0xcdbd9c, env.ambient ?? 0.75));
@@ -94,6 +96,19 @@ export class Engine {
     L.castShadow = sun.shadows !== false; L.shadow.mapSize.set(this.headless ? 4096 : 2048, this.headless ? 4096 : 2048);
     Object.assign(L.shadow.camera, { left: -0.75 * big, right: 0.75 * big, top: 0.75 * big, bottom: -0.75 * big, near: 0.1, far: 3 * big + 3 * H });
     L.shadow.bias = -0.0004; L.shadow.radius = 4; s.add(L, L.target); this.sun = L;
+  }
+
+  _dispose(scene) {
+    const tex = new Set();
+    scene.traverse(o => {
+      if (o.isLight && o.dispose) o.dispose();             // shadow maps
+      if (o.geometry) o.geometry.dispose();
+      for (const m of [].concat(o.material || [])) { for (const v of Object.values(m)) if (v && v.isTexture) tex.add(v); m.dispose(); }
+    });
+    if (this._envRT) { this._envRT.dispose(); this._envRT = null; }   // a render target's texture is freed through the target
+    else if (scene.environment) tex.add(scene.environment);
+    if (scene.background && scene.background.isTexture) tex.add(scene.background);
+    for (const t of tex) t.dispose();
   }
 
   _build(e, ctx, off) {

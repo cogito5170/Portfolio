@@ -32,9 +32,15 @@ print("\nSANDBOX ISOLATION: %s%s" % ("available" if SANDBOX else "NOT available 
 GOOD_PLUGIN = '''
 def translate(axes):
     return {"bars": 1 + int(round(20 * axes.get("density", 0.5))), "seed": 1}
+def _rules(world):
+    cs = [c for c in (world.get("rules") or {}).get("constraints") or [] if c.get("enabled", True) is not False]
+    pal = next((c["colours"] for c in cs if c["kind"] == "palette"), ["#ffffff", "#333333"])
+    cap = next((c["value"] - 1 for c in cs if c["kind"] == "max_elements"), 10 ** 6)
+    return pal[0], pal[-1], max(1, cap)
 def generate(world, intent, params):
-    bars = "".join('<rect x="%d" y="10" width="4" height="80" fill="#333333"/>' % (10 + 8 * i) for i in range(params["bars"]))
-    return {"artifact": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><rect x="0" y="0" width="200" height="100" fill="#ffffff"/>' + bars + "</svg>", "media_type": "image/svg+xml"}
+    bg, ink, cap = _rules(world)
+    bars = "".join('<rect x="%d" y="10" width="4" height="80" fill="%s"/>' % (10 + 8 * i, ink) for i in range(min(params["bars"], cap)))
+    return {"artifact": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><rect x="0" y="0" width="200" height="100" fill="%s"/>' % bg + bars + "</svg>", "media_type": "image/svg+xml"}
 def self_assess(world, artifact):
     return {"score": 1.0, "notes": "ok"}
 def ports(world, params):

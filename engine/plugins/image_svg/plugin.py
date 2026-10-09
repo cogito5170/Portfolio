@@ -32,7 +32,8 @@ def translate(axes: dict) -> dict:
 def _constraints(world):
     out = {}
     for c in (world.get("rules") or {}).get("constraints") or []:
-        out[c["kind"]] = c
+        if c.get("enabled", True) is not False:          # E-03: a rule the artist switched off is not honoured
+            out[c["kind"]] = c
     return out
 
 

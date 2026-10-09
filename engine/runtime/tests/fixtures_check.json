@@ -595,5 +595,155 @@
     }
    ]
   }
+ },
+ {
+  "name": "forbidden and glossary ok",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [],
+   "forbidden": [
+    {
+     "kind": "type",
+     "value": "robot",
+     "why": "이 세계에는 기계가 없다"
+    },
+    {
+     "kind": "colour",
+     "value": "#FF00ff"
+    },
+    {
+     "kind": "word",
+     "value": "네온",
+     "enabled": false
+    }
+   ],
+   "glossary": [
+    {
+     "term": "여백",
+     "meaning": "비어 있음이 아니라 숨",
+     "axes": {
+      "density": 0.1
+     }
+    },
+    {
+     "term": "ma (間)",
+     "meaning": "사이"
+    }
+   ]
+  }
+ },
+ {
+  "name": "forbidden and glossary bad",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [],
+   "forbidden": [
+    {
+     "kind": "smell",
+     "value": "x"
+    },
+    {
+     "kind": "word",
+     "value": "  "
+    },
+    {
+     "kind": "colour",
+     "value": "pink"
+    },
+    {
+     "kind": "type",
+     "value": "box",
+     "enabled": "no"
+    },
+    "str"
+   ],
+   "glossary": [
+    {
+     "term": "a",
+     "meaning": "x"
+    },
+    {
+     "term": "a",
+     "meaning": ""
+    },
+    {
+     "term": "",
+     "meaning": "y",
+     "axes": {
+      "density": 2
+     }
+    },
+    {
+     "term": "b",
+     "meaning": "z",
+     "axes": [
+      1
+     ]
+    },
+    7
+   ]
+  }
+ },
+ {
+  "name": "forbidden and glossary not lists",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [],
+   "forbidden": {
+    "kind": "type"
+   },
+   "glossary": "여백"
+  }
+ },
+ {
+  "name": "rule switches and ignore_rules",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [
+    {
+     "type": "box",
+     "ignore_rules": [
+      "palette",
+      "forbidden"
+     ]
+    },
+    {
+     "type": "box",
+     "ignore_rules": [
+      "colour"
+     ]
+    },
+    {
+     "type": "box",
+     "ignore_rules": "palette",
+     "children": [
+      {
+       "type": "box",
+       "ignore_rules": []
+      }
+     ]
+    }
+   ],
+   "rules": {
+    "constraints": [
+     {
+      "kind": "palette",
+      "colours": [
+       "#ffffff"
+      ],
+      "enabled": false
+     },
+     {
+      "kind": "max_elements",
+      "value": 3,
+      "enabled": "off"
+     }
+    ]
+   }
+  }
  }
 ]

@@ -35,11 +35,27 @@ def translate(axes: dict) -> dict:
             "v_draw": round(0.05 + 0.45 * a("motion"), 4), "seed": 1}
 
 
-def _ink(world):
+def _palette(world):
     for c in (world.get("rules") or {}).get("constraints") or []:
-        if c["kind"] == "palette":
-            return c["colours"][-1]
-    return "#222222"
+        if c["kind"] == "palette" and c.get("enabled", True) is not False:
+            return list(c["colours"])
+    return None
+
+
+def _ink(world):
+    pal = _palette(world)
+    return pal[-1] if pal else "#222222"
+
+
+def _paper(world):
+    """The sheet: the lightest palette colour other than the ink (a world with a palette gets no off-palette paper);
+    no palette -> warm white; a one-colour palette -> no sheet drawn."""
+    pal = _palette(world)
+    if pal is None:
+        return "#fffdf7"
+    rest = [c for c in pal[:-1] if c.lower() != pal[-1].lower()]
+    lum = lambda c: 0.2126 * int(c[1:3], 16) + 0.7152 * int(c[3:5], 16) + 0.0722 * int(c[5:7], 16)
+    return max(rest, key=lum) if rest else None
 
 
 def strokes(params, intent):
@@ -65,8 +81,10 @@ def generate(world: dict, intent: dict, params: dict) -> dict:
     tips = [RB.tip(ch, q) for q in tr["q"]]
     x0, y0 = C[0] - R_MAX - 0.1, C[1] - R_MAX - 0.1
     W = int(2 * (R_MAX + 0.1) * PX)
-    svg = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="%d" height="%d">' % (W, W, W, W),
-           '<rect x="0" y="0" width="%d" height="%d" fill="#fffdf7"/>' % (W, W)]
+    paper = _paper(world)
+    svg = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="%d" height="%d">' % (W, W, W, W)]
+    if paper:
+        svg.append('<rect x="0" y="0" width="%d" height="%d" fill="%s"/>' % (W, W, paper))
     run = []
     for i, (t, pen) in enumerate(zip(tips, tr["pen"])):
         if pen:

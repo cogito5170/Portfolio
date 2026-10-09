@@ -9,6 +9,7 @@ import { TalkClient } from './talk.js';
 import { Presence } from './presence.js';
 import { enableXR } from './xr.js';
 import { selftests } from './selftest.js';
+import { report } from './report.js';
 
 const P = new URLSearchParams(location.search), HEADLESS = P.has('headless');
 const say = s => console.log('WE_STATUS:' + s);
@@ -26,11 +27,7 @@ try {
   if (P.has('lowspec')) eng.setLowSpec(P.get('lowspec') !== '0');
   if (eng.selftest) {
     if (!selftests[eng.selftest]) throw new Error('unknown selftest ' + eng.selftest);
-    const bytes = new TextEncoder().encode(JSON.stringify(await selftests[eng.selftest](eng)));   // UTF-8, then base64
-    let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    const b64 = btoa(bin), part = 200000;                 // long results go out in numbered parts (console line limits)
-    if (b64.length <= part) console.log('WE_RESULT:' + b64);
-    else for (let i = 0, n = Math.ceil(b64.length / part); i < n; i++) console.log(`WE_RESULT_PART:${i}/${n}:` + b64.slice(i * part, (i + 1) * part));
+    report(await selftests[eng.selftest](eng));
   }
   if (HEADLESS) eng.step(+(P.get('t') || 0));
   else { hud(eng); guide(eng); enableXR(eng).then(x => { eng.xr = x; }); if (P.has('perf')) perf(eng, performance.now()); eng.start({ autoLowSpec: !P.has('lowspec') }); }

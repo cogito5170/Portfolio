@@ -25,12 +25,13 @@ def diff(a: dict, b: dict) -> dict:
             edited[k] = {f: [fa.get(f), fb.get(f)] for f in ch}
     ma, mb = a.get("materials") or {}, b.get("materials") or {}
     mats = sorted(k for k in set(ma) | set(mb) if ma.get(k) != mb.get(k))
-    ca, cb = {c["id"] for c in a.get("concepts") or []}, {c["id"] for c in b.get("concepts") or []}
+    ca, cb = {c["id"]: c for c in a.get("concepts") or []}, {c["id"]: c for c in b.get("concepts") or []}
     other = sorted(k for k in set(a) | set(b) if k not in ("rules", "entities", "materials", "concepts") and a.get(k) != b.get(k))
     ra, rb = dict(a.get("rules") or {}), dict(b.get("rules") or {})
     ra.pop("axes", None); rb.pop("axes", None)
     return {"axes": axes, "entities_added": added, "entities_removed": removed, "entities_edited": edited,
-            "materials_changed": mats, "concepts_added": sorted(cb - ca), "concepts_removed": sorted(ca - cb),
+            "materials_changed": mats, "concepts_added": sorted(set(cb) - set(ca)), "concepts_removed": sorted(set(ca) - set(cb)),
+            "concepts_edited": sorted(k for k in set(ca) & set(cb) if ca[k] != cb[k]),
             "constraints_changed": ra != rb, "other_fields": other}
 
 
@@ -53,8 +54,10 @@ def summary_ko(d: dict) -> "list[str]":
         L.append("개념 추가: " + ", ".join(d["concepts_added"]))
     if d["concepts_removed"]:
         L.append("개념 제거: " + ", ".join(d["concepts_removed"]))
+    if d.get("concepts_edited"):
+        L.append("개념 고침: " + ", ".join(d["concepts_edited"]))
     if d["constraints_changed"]:
         L.append("세계 규칙(제약) 변경")
     if d["other_fields"]:
-        L.append("기타: " + ", ".join(d["other_fields"]))
+        L.append("기타: " + ", ".join({"forbidden": "금지 목록", "glossary": "용어집"}.get(k, k) for k in d["other_fields"]))
     return L or ["바뀐 것 없음"]

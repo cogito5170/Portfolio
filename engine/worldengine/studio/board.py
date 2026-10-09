@@ -26,7 +26,7 @@ def build(s, set_id: str, out_dir=None, render: bool = True) -> str:
     for pid in vs["proposals"]:
         p = s.proposals[pid]
         w = p["world"]
-        prev = PL.generate(img, w)
+        prev = PL.generate(img, w, enforce=False)           # the board shows rule breaks as review items, it does not hide the variant
         m = MS.axes(prev["artifact"])
         shot = ""
         if render and headless.available()[0]:
@@ -43,11 +43,13 @@ def build(s, set_id: str, out_dir=None, render: bool = True) -> str:
         cols.append("""<section><h2>%s</h2><p class="why">%s</p><ul>%s</ul>%s
 <div class="svg">%s</div>
 <table><tr><th>축</th><th>지금</th><th>시안</th><th>미리보기 측정</th></tr>%s</table>
-<details><summary>레시피 (D-03)</summary><pre>%s</pre></details><p class="st">상태: %s</p></section>""" % (
+<details><summary>레시피 (D-03)</summary><pre>%s</pre></details><p class="st">상태: %s%s</p></section>""" % (
             html.escape(p.get("label", pid)), html.escape(p["why"]), "".join("<li>%s</li>" % html.escape(x) for x in DF.summary_ko(p["diff"])),
             shot, prev["artifact"].replace("<svg ", '<svg style="width:100%;height:auto" ', 1), rows,
             html.escape("기준 판: %d\n세계 해시: %s\n미리보기 레시피: %s" % (vs["base"], prev["recipe"]["world_hash"], prev["recipe"])),
-            {"pending": "고르는 중", "applied": "적용됨", "rejected": "버림"}[p["status"]]))
+            {"pending": "고르는 중", "applied": "적용됨", "rejected": "버림"}[p["status"]],
+            html.escape(" · 검토 필요: 미리보기가 규칙 %d개를 어긴다 (%s)" % (len(prev["rules"]["violations"]), ", ".join(sorted({x["kind"] for x in prev["rules"]["violations"]}))))
+            if prev["rules"]["violations"] else ""))
     page = """<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>시안 비교 보드</title><style>
 :root{--bg:#f4f1ea;--ink:#1f2328;--sub:#5b616b;--card:#fff;--line:#e3dfd6}
