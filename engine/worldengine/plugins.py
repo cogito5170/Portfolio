@@ -10,7 +10,10 @@
     }
 
 The core wraps generate() so every result carries a recipe (G-01); regenerate(recipe, world) must give the same
-bytes (V-05). Adding a plugin means adding a directory -- no core file changes (V-02, tested by hashing).
+bytes (V-05). The core, not the plugin, then measures the result against the world's rules (X-03: complexity
+budget, palette, forbidden list -- constraints.output_violations) and refuses it (RuleViolation) unless the artist
+switched that rule off (E-03). enforce=False returns the result with the violations, for review screens only.
+Adding a plugin means adding a directory -- no core file changes (V-02, tested by hashing).
 """
 from __future__ import annotations
 
@@ -53,7 +56,14 @@ def axes_of(world: dict) -> dict:
     return dict((world.get("rules") or {}).get("axes") or {})
 
 
-def generate(plugin: dict, world: dict, intent: "dict | None" = None, params: "dict | None" = None) -> dict:
+class RuleViolation(ValueError):
+    def __init__(self, plugin: str, violations: "list[dict]"):
+        self.violations = violations
+        super().__init__("%s: the result breaks the world's rules (X-03): %s" % (plugin, "; ".join(
+            "%s %s=%s" % (v["kind"], v["field"], v["value"]) for v in violations[:5])))
+
+
+def generate(plugin: dict, world: dict, intent: "dict | None" = None, params: "dict | None" = None, enforce: bool = True) -> dict:
     """Run a plugin and attach the recipe. params=None -> plugin.translate(world axes); edited params are used as given."""
     intent = dict(intent or {})
     w = copy.deepcopy(world)
@@ -61,12 +71,17 @@ def generate(plugin: dict, world: dict, intent: "dict | None" = None, params: "d
     out = plugin["generate"](w, intent, copy.deepcopy(p))
     art = out["artifact"]
     data = art.encode("utf-8") if isinstance(art, str) else art
-    return {**out, "recipe": {"plugin": plugin["name"], "plugin_version": plugin["version"], "world": world.get("name"),
-                              "world_hash": world_hash(world), "intent": intent, "params": p,
-                              "artifact_sha256": hashlib.sha256(data).hexdigest()}}
+    from worldengine import constraints as CS
+    v = CS.output_violations(world, art, out.get("media_type", ""))
+    if v and enforce:
+        raise RuleViolation(plugin["name"], v)
+    return {**out, "rules": {"ok": not v, "violations": v},
+            "recipe": {"plugin": plugin["name"], "plugin_version": plugin["version"], "world": world.get("name"),
+                       "world_hash": world_hash(world), "intent": intent, "params": p,
+                       "artifact_sha256": hashlib.sha256(data).hexdigest()}}
 
 
-def regenerate(plugin: dict, recipe: dict, world: dict) -> dict:
+def regenerate(plugin: dict, recipe: dict, world: dict, enforce: bool = True) -> dict:
     if recipe["world_hash"] != world_hash(world):
         raise ValueError("recipe was made for another version of this world (%s != %s)" % (recipe["world_hash"], world_hash(world)))
-    return generate(plugin, world, recipe["intent"], recipe["params"])
+    return generate(plugin, world, recipe["intent"], recipe["params"], enforce)

@@ -87,5 +87,7 @@ document.getElementById('f').onsubmit = async (e) => {
   for (const x of r.refusals || []) { const c = el('div', 'card warn'); c.appendChild(el('h4', '', '지금은 못 해요')); c.appendChild(el('div', '', x.reason)); const ul = el('ul'); for (const a of x.alternatives) ul.appendChild(el('li', '', a)); c.appendChild(ul); log.appendChild(c); }
   refresh();
 };
+{ const c = el('div', 'card'); c.appendChild(el('h4', '', '직접 고치기')); const a = el('a', '', '세계 편집기 열기 — 몸·규칙·금지 목록·용어집');
+  a.href = '/runtime/editor.html?studio=1&t=' + encodeURIComponent(T); a.target = '_blank'; c.appendChild(a); c.appendChild(el('div', 'why', '편집기에서 저장하면 새 판이 돼요 (되돌릴 수 있어요).')); log.appendChild(c); }
 show('/api/world.json'); refresh();
 </script></body></html>

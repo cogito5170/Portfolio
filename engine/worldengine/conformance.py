@@ -8,6 +8,8 @@ G-02 translate is pure, every param it returns is in the recipe, and editing one
      (judged only when the plugin repeats itself -- otherwise any 'change' is noise)
 G-03 self_assess returns a score in [0,1] and notes
 G-04 ports expose at least one of palette/tempo/events; palette entries are "#rrggbb"
+X-03 the default result obeys the world's rules as the core measures them (palette, element budget, forbidden list).
+     The kit runs generate with enforce=False so the other clauses are still judged when this one fails.
 """
 from __future__ import annotations
 
@@ -35,7 +37,7 @@ def run(plugin: dict, worlds: "list[dict]") -> "list[dict]":
     for w in worlds:
         before = copy.deepcopy(w)
         try:
-            r1 = PL.generate(plugin, w)
+            r1 = PL.generate(plugin, w, enforce=False)
         except Exception as e:                                    # noqa: BLE001 -- a crashing plugin fails conformance
             add(w, "G-01", False, "generate raised %s: %s" % (type(e).__name__, e)); continue
         ok = "artifact" in r1 and "media_type" in r1
@@ -44,6 +46,8 @@ def run(plugin: dict, worlds: "list[dict]") -> "list[dict]":
         except TypeError:
             ser = False
         add(w, "G-01", ok and ser and w == before, "artifact+media_type, JSON recipe, world untouched")
+        rv = r1["rules"]["violations"]
+        add(w, "X-03", not rv, "obeys the world's rules" if not rv else "; ".join("%s %s=%s" % (v["kind"], v["field"], v["value"]) for v in rv[:4]))
         def clause(name, fn):                                       # a clause that raises fails that clause, not the kit
             try:
                 fn()
@@ -53,7 +57,7 @@ def run(plugin: dict, worlds: "list[dict]") -> "list[dict]":
         state = {}
 
         def v05():
-            state["r2"] = PL.regenerate(plugin, r1["recipe"], w)
+            state["r2"] = PL.regenerate(plugin, r1["recipe"], w, enforce=False)
             add(w, "V-05", state["r2"]["artifact"] == r1["artifact"], "regenerate from recipe: %s" % ("identical" if state["r2"]["artifact"] == r1["artifact"] else "DIFFERENT"))
 
         def g02():
@@ -63,7 +67,7 @@ def run(plugin: dict, worlds: "list[dict]") -> "list[dict]":
             changed = None
             for k, v in _edits(p1):
                 q = dict(p1); q[k] = v
-                if PL.generate(plugin, w, params=q)["artifact"] != r1["artifact"]:
+                if PL.generate(plugin, w, params=q, enforce=False)["artifact"] != r1["artifact"]:
                     changed = k; break
             repeatable = "r2" in state and state["r2"]["artifact"] == r1["artifact"]   # an unrepeatable plugin 'changes' on every call
             add(w, "G-02", repeatable and p1 == p2 and p1 == r1["recipe"]["params"] and changed is not None,

@@ -12,8 +12,12 @@
 //                 "material": name|{...}, "behaviors": [{"type", ...}], "solid": bool, "children": [...], <type fields>}],
 //   "views": {name: {"pos": [x,y,z], "target": [x,y,z], "fov": deg}},
 //   "player": {"spawn": [x,y], "yaw_deg", "eye": "adult"|"child", "eye_heights": {"child": 1.1, "adult": 1.7}, "speed"},
-//   "controls": {"default": "orbit"|"walk"}
+//   "controls": {"default": "orbit"|"walk"},
+//   "forbidden": [{"kind": "type"|"colour"|"word", "value", "why"?, "enabled"?}],   // W-01: what this world never has
+//   "glossary": [{"term", "meaning", "axes"?: {axis: 0..1}}]                       // W-05: the artist's own words, any language
 // }
+// Rules can be switched off (E-03): rules.constraints[i].enabled = false, forbidden[i].enabled = false, or one body
+// breaks a rule on purpose: entity.ignore_rules = ["dimension_series" | "palette" | "max_elements" | "forbidden"].
 //
 // Unknown fields are kept and ignored (open data): a newer plugin may read them.
 // check() says what is wrong; it never fixes the world.
@@ -41,6 +45,8 @@ export function check(w, knownTypes = null) {
     if (e.pos !== undefined && !isVec(e.pos, 3)) bad.push(`${p}.pos must be [x,y,z]`);
     if (e.rot !== undefined && !isVec(e.rot, 3)) bad.push(`${p}.rot must be [rx,ry,rz] degrees`);
     if (e.scale !== undefined && !(isNum(e.scale) || isVec(e.scale, 3))) bad.push(`${p}.scale must be a number or [sx,sy,sz]`);
+    if (e.ignore_rules !== undefined && !(Array.isArray(e.ignore_rules) && e.ignore_rules.every(k => RULE_KINDS.includes(k))))
+      bad.push(`${p}.ignore_rules must be a list of ${RULE_KINDS.join('|')}`);
     if (typeof e.material === 'string' && !(w.materials && e.material in w.materials) && !e.material.includes('.'))
       bad.push(`${p}.material "${e.material}" is not in materials`);
     if (e.children !== undefined) { if (!Array.isArray(e.children)) bad.push(`${p}.children must be a list`); else walk(e.children, p + '.children'); }
@@ -90,6 +96,9 @@ function checkConcepts(w, ids, bad) {
 
 export const AXES = ['density', 'colour', 'form', 'texture', 'motion', 'sound', 'narrative'];
 export const CONSTRAINT_KINDS = ['dimension_series', 'palette', 'max_elements'];
+export const RULE_KINDS = [...CONSTRAINT_KINDS, 'forbidden'];
+export const FORBIDDEN_KINDS = ['type', 'colour', 'word'];
+export const isHex = v => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
 
 // World ingredient (rules), Expression ingredient (expressions), version/fork: same as world.py _check_rules.
 function checkRules(w, bad) {
@@ -106,6 +115,7 @@ function checkRules(w, bad) {
         else if (kind === 'dimension_series' && !(Array.isArray(c.values_m) && c.values_m.length && c.values_m.every(x => isNum(x) && x > 0))) bad.push(`${p}.values_m must be a non-empty list of positive numbers`);
         else if (kind === 'palette' && !(Array.isArray(c.colours) && c.colours.length && c.colours.every(x => typeof x === 'string' && x.length === 7 && x[0] === '#'))) bad.push(`${p}.colours must be a non-empty list of "#rrggbb"`);
         else if (kind === 'max_elements' && !(Number.isInteger(c.value) && c.value > 0)) bad.push(`${p}.value must be a positive integer`);
+        if (c && typeof c === 'object' && 'enabled' in c && typeof c.enabled !== 'boolean') bad.push(`${p}.enabled must be true|false`);
       });
     }
   }
@@ -114,9 +124,43 @@ function checkRules(w, bad) {
     if (!Array.isArray(ex)) bad.push('expressions must be a list');
     else ex.forEach((e, i) => { if (!e || typeof e !== 'object' || typeof e.medium !== 'string' || !e.medium) bad.push(`expressions[${i}].medium must be a non-empty string`); });
   }
+  checkForbiddenGlossary(w, bad);
   if ('version' in w && !(typeof w.version === 'string' && w.version)) bad.push('version must be a non-empty string');
   const fk = w.forked_from;
   if (fk !== undefined && fk !== null && !(typeof fk === 'object' && typeof fk.world === 'string' && fk.world)) bad.push('forked_from.world must name the parent world');
+}
+
+// W-01 forbidden list and W-05 glossary: same rules and messages as world.py _check_forbidden_glossary.
+function checkForbiddenGlossary(w, bad) {
+  const fb = w.forbidden;
+  if (fb !== undefined && fb !== null) {
+    if (!Array.isArray(fb)) bad.push('forbidden must be a list');
+    else fb.forEach((f, i) => {
+      const p = `forbidden[${i}]`;
+      if (!f || typeof f !== 'object' || Array.isArray(f)) { bad.push(`${p} must be an object`); return; }
+      if (!FORBIDDEN_KINDS.includes(f.kind)) bad.push(`${p}.kind must be one of ${FORBIDDEN_KINDS.join('|')}: ${JSON.stringify(f.kind ?? null)}`);
+      else if (typeof f.value !== 'string' || !f.value.trim()) bad.push(`${p}.value must be a non-empty string`);
+      else if (f.kind === 'colour' && !isHex(f.value)) bad.push(`${p}.value must be "#rrggbb" for a colour: ${JSON.stringify(f.value)}`);
+      if ('enabled' in f && typeof f.enabled !== 'boolean') bad.push(`${p}.enabled must be true|false`);
+    });
+  }
+  const gl = w.glossary;
+  if (gl !== undefined && gl !== null) {
+    if (!Array.isArray(gl)) { bad.push('glossary must be a list'); return; }
+    const seen = new Set();
+    gl.forEach((g, i) => {
+      const p = `glossary[${i}]`;
+      if (!g || typeof g !== 'object' || Array.isArray(g)) { bad.push(`${p} must be an object`); return; }
+      if (typeof g.term !== 'string' || !g.term.trim()) bad.push(`${p}.term must be a non-empty string`);
+      else if (seen.has(g.term)) bad.push(`${p}.term duplicated: "${g.term}"`);
+      else seen.add(g.term);
+      if (typeof g.meaning !== 'string' || !g.meaning.trim()) bad.push(`${p}.meaning must be a non-empty string`);
+      if (g.axes !== undefined) {
+        if (!g.axes || typeof g.axes !== 'object' || Array.isArray(g.axes)) bad.push(`${p}.axes must be an object`);
+        else for (const [k, v] of Object.entries(g.axes)) if (!isNum(v) || v < 0 || v > 1) bad.push(`${p}.axes.${k} must be a number in [0,1]: ${JSON.stringify(v ?? null)}`);
+      }
+    });
+  }
 }
 
 export const TRIGGER_ON = ['tap', 'near'];

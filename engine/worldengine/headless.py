@@ -113,8 +113,9 @@ def render(html_path, png_path, view: str = "aerial", w: int = 1600, h: int = 10
 
 def render_world(world, png_path, view: str = "aerial", w: int = 1280, h: int = 800, mode: str = "orbit",
                  eye: "str | None" = None, t: float = 0.0, selftest: "str | None" = None, timeout_s: float = 240.0,
-                 query: "dict | None" = None) -> dict:
+                 query: "dict | None" = None, page: str = "index.html") -> dict:
     """A world (dict or path to world JSON) through the modular runtime (engine/runtime). Same honesty rules.
+    page="editor.html" opens the same world in the world editor instead of the visitor runtime.
 
     With selftest=<name>, the page runs that in-browser test and its measurements come back as r["result"]."""
     ok, why = available()
@@ -127,7 +128,7 @@ def render_world(world, png_path, view: str = "aerial", w: int = 1280, h: int = 
         os.symlink(os.path.abspath(_three_dir()), tmp / "vendor" / "three")
         data = world if isinstance(world, dict) else json.loads(Path(world).read_text(encoding="utf-8"))
         (tmp / "world.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-        q = "runtime/index.html?world=/world.json&view=%s&mode=%s&w=%d&h=%d&t=%g&headless=1" % (view, mode, w, h, t)
+        q = "runtime/%s?world=/world.json&view=%s&mode=%s&w=%d&h=%d&t=%g&headless=1" % (page, view, mode, w, h, t)
         if eye:
             q += "&eye=" + eye
         if selftest:

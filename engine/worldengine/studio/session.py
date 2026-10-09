@@ -73,6 +73,19 @@ class Session:
         p["status"] = "applied"
         return {"version": self.versions[-1]["n"], "summary": DF.summary_ko(d)}
 
+    def edit(self, new_world: dict, why: str = "") -> dict:
+        """Artist action (E-01): the artist changed the world directly in the editor. It becomes a new version like any
+        applied change, so it can be compared, previewed and reverted; nothing is proposed or approved on their behalf."""
+        bad = WD.check(new_world)
+        if bad:
+            raise ValueError("invalid world: " + "; ".join(bad[:3]))
+        d = DF.diff(self.versions[-1]["world"], new_world)
+        if not d or not any(d.values()):
+            return {"version": self.versions[-1]["n"], "summary": [], "unchanged": True}
+        self.versions.append({"n": len(self.versions), "world": copy.deepcopy(new_world), "why": "작가가 직접 고침" + (": " + why if why else ""),
+                              "diff": d, "t": time.time()})
+        return {"version": self.versions[-1]["n"], "summary": DF.summary_ko(d)}
+
     def reject(self, pid: str, note: str = "") -> None:
         self.proposals[pid]["status"] = "rejected"
         self.proposals[pid]["artist_note"] = note

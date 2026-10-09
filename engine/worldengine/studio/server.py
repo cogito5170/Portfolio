@@ -168,6 +168,8 @@ def make_handler(st: Studio):
                         return self._send(200, st.message(body))
                     if act == "apply":
                         return self._send(200, st.apply(body))
+                    if act == "edit":                                        # E-01: the editor's direct changes
+                        return self._send(200, st.session.edit(body["world"], str(body.get("why", ""))[:200]))
                     if act == "reject":
                         st.session.reject(body["proposal"], body.get("note", "")); return self._send(200, {"ok": True})
                     if act == "approve":

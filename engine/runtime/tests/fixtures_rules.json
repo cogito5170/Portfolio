@@ -1,0 +1,319 @@
+[
+ {
+  "name": "dimension series",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [
+    {
+     "id": "a",
+     "type": "box",
+     "size": [
+      1,
+      2,
+      1
+     ]
+    },
+    {
+     "id": "b",
+     "type": "box",
+     "size": [
+      1,
+      3,
+      1
+     ]
+    },
+    {
+     "id": "c",
+     "type": "sphere",
+     "radius": 0.75,
+     "ignore_rules": [
+      "dimension_series"
+     ]
+    },
+    {
+     "id": "d",
+     "type": "cylinder",
+     "radius": 1.5,
+     "height": 2,
+     "children": [
+      {
+       "id": "d1",
+       "type": "cone",
+       "radius": 0.4,
+       "height": 1
+      }
+     ]
+    }
+   ],
+   "rules": {
+    "constraints": [
+     {
+      "kind": "dimension_series",
+      "values_m": [
+       1,
+       2,
+       3
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "dimension series switched off",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [
+    {
+     "id": "a",
+     "type": "box",
+     "size": [
+      1,
+      2,
+      1
+     ]
+    },
+    {
+     "id": "b",
+     "type": "box",
+     "size": [
+      1,
+      3,
+      1
+     ]
+    },
+    {
+     "id": "c",
+     "type": "sphere",
+     "radius": 0.75,
+     "ignore_rules": [
+      "dimension_series"
+     ]
+    },
+    {
+     "id": "d",
+     "type": "cylinder",
+     "radius": 1.5,
+     "height": 2,
+     "children": [
+      {
+       "id": "d1",
+       "type": "cone",
+       "radius": 0.4,
+       "height": 1
+      }
+     ]
+    }
+   ],
+   "rules": {
+    "constraints": [
+     {
+      "kind": "dimension_series",
+      "values_m": [
+       1,
+       2
+      ],
+      "enabled": false
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "palette materials and inline",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [
+    {
+     "id": "p",
+     "type": "box",
+     "material": {
+      "color": "#123456"
+     }
+    },
+    {
+     "id": "q",
+     "type": "box",
+     "material": {
+      "color": "#123456"
+     },
+     "ignore_rules": [
+      "palette"
+     ]
+    },
+    {
+     "type": "box",
+     "material": {
+      "color": "#ffffff",
+      "emissive": "#000001"
+     }
+    }
+   ],
+   "materials": {
+    "stone": {
+     "color": "#AABBCC"
+    },
+    "glow": {
+     "color": "#ffffff",
+     "emissive": "#ff0000"
+    }
+   },
+   "rules": {
+    "constraints": [
+     {
+      "kind": "palette",
+      "colours": [
+       "#aabbcc",
+       "#FFFFFF"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "max elements with ignore",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [
+    {
+     "type": "box"
+    },
+    {
+     "type": "box",
+     "ignore_rules": [
+      "max_elements"
+     ]
+    },
+    {
+     "type": "group",
+     "children": [
+      {
+       "type": "box"
+      },
+      {
+       "type": "box"
+      }
+     ]
+    }
+   ],
+   "rules": {
+    "constraints": [
+     {
+      "kind": "max_elements",
+      "value": 2
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "forbidden kinds",
+  "world": {
+   "format": "world/1",
+   "name": "w",
+   "entities": [
+    {
+     "id": "arm",
+     "type": "robot.arm"
+    },
+    {
+     "id": "rob",
+     "type": "robots"
+    },
+    {
+     "id": "s",
+     "type": "sound",
+     "caption": "NEON hum",
+     "material": {
+      "color": "#ff00ff"
+     }
+    },
+    {
+     "id": "ch",
+     "type": "character",
+     "lines": [
+      "안녕",
+      "전쟁과 neon"
+     ],
+     "triggers": [
+      {
+       "on": "tap",
+       "do": [
+        {
+         "action": "caption",
+         "text": "a neon sign"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "bx",
+     "type": "box",
+     "ignore_rules": [
+      "forbidden"
+     ],
+     "text": "neon"
+    },
+    {
+     "type": "text",
+     "text": "no"
+    }
+   ],
+   "materials": {
+    "m": {
+     "color": "#FF00FF"
+    }
+   },
+   "forbidden": [
+    {
+     "kind": "type",
+     "value": "robot"
+    },
+    {
+     "kind": "colour",
+     "value": "#ff00ff"
+    },
+    {
+     "kind": "word",
+     "value": "Neon"
+    },
+    {
+     "kind": "word",
+     "value": "전쟁",
+     "enabled": false
+    },
+    {
+     "kind": "type",
+     "value": "box"
+    }
+   ],
+   "tours": [
+    {
+     "id": "t",
+     "stops": [
+      {
+       "pos": [
+        0,
+        0,
+        1
+       ],
+       "target": [
+        1,
+        0,
+        1
+       ],
+       "dwell_s": 1,
+       "caption": "neon 거리"
+      }
+     ]
+    }
+   ]
+  }
+ }
+]

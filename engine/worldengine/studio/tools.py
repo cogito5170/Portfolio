@@ -93,7 +93,9 @@ def _describe(w):
     return {"name": w["name"], "version": w.get("version"), "axes": (w.get("rules") or {}).get("axes", {}),
             "constraints": (w.get("rules") or {}).get("constraints", []), "concepts": [{"id": c["id"], "title": c["title"]} for c in w.get("concepts") or []],
             "entities": {"count": len(ents), "by_type": by, "ids": [e.get("id") for e in ents if e.get("id")][:80]},
-            "materials": sorted(w.get("materials") or {}), "expressions": w.get("expressions", [])}
+            "materials": sorted(w.get("materials") or {}), "expressions": w.get("expressions", []),
+            "forbidden": [f for f in w.get("forbidden") or [] if f.get("enabled", True) is not False],     # W-01
+            "glossary": w.get("glossary", [])}                                                            # W-05
 
 
 def _axes_world(w, changes):
@@ -177,7 +179,11 @@ def run(s: SS.Session, name: str, inp: dict) -> dict:
         return s.propose(copy.deepcopy(s.versions[n]["world"]), inp["why"], "revert", {"to_version": n})
     if name == "preview":
         p = PL.discover()[inp["plugin"]]
-        r = PL.generate(p, w)
+        try:
+            r = PL.generate(p, w)
+        except PL.RuleViolation as e:                 # X-03: say so; the artist may switch the rule off (E-03), the agent may not
+            return {"ok": False, "error": "결과가 이 세계의 규칙을 어긴다 — 만들지 않았다", "violations": e.violations[:10],
+                    "note": "규칙을 끄는 것은 작가만 할 수 있다 (편집기의 규칙 스위치)"}
         s.log.append(("preview", inp["plugin"], r["recipe"]["artifact_sha256"]))
         s.previews = getattr(s, "previews", []) + [{"plugin": inp["plugin"], "artifact": r["artifact"], "recipe": r["recipe"], "notes": r.get("notes", "")}]
         return {"ok": True, "plugin": inp["plugin"], "media_type": r["media_type"], "notes": r.get("notes", ""), "recipe": r["recipe"]}

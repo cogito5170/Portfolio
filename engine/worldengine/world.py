@@ -61,6 +61,8 @@ def check(w, known_types=None) -> "list[str]":
                 bad.append("%s.rot must be [rx,ry,rz] degrees" % p)
             if "scale" in e and not (_num(e["scale"]) or _vec(e["scale"], 3)):
                 bad.append("%s.scale must be a number or [sx,sy,sz]" % p)
+            if "ignore_rules" in e and not (isinstance(e["ignore_rules"], list) and all(k in RULE_KINDS for k in e["ignore_rules"])):
+                bad.append("%s.ignore_rules must be a list of %s" % (p, "|".join(RULE_KINDS)))
             m = e.get("material")
             if isinstance(m, str) and m not in mats and "." not in m:
                 bad.append('%s.material "%s" is not in materials' % (p, m))
@@ -136,6 +138,12 @@ def _check_concepts(w, ids, bad):
 
 AXES = ("density", "colour", "form", "texture", "motion", "sound", "narrative")   # P2 base axes; worlds may add more
 CONSTRAINT_KINDS = ("dimension_series", "palette", "max_elements")
+RULE_KINDS = CONSTRAINT_KINDS + ("forbidden",)           # E-03: entity.ignore_rules names these
+FORBIDDEN_KINDS = ("type", "colour", "word")
+
+
+def is_hex(v) -> bool:
+    return isinstance(v, str) and len(v) == 7 and v[0] == "#" and all(c in "0123456789abcdefABCDEF" for c in v[1:])
 
 
 def _check_rules(w, bad):
@@ -163,6 +171,8 @@ def _check_rules(w, bad):
                     bad.append('%s.colours must be a non-empty list of "#rrggbb"' % p)
                 elif kind == "max_elements" and not (isinstance(c.get("value"), int) and not isinstance(c.get("value"), bool) and c["value"] > 0):
                     bad.append("%s.value must be a positive integer" % p)
+                if isinstance(c, dict) and "enabled" in c and not isinstance(c["enabled"], bool):
+                    bad.append("%s.enabled must be true|false" % p)
     ex = w.get("expressions")
     if ex is not None:
         if not isinstance(ex, list):
@@ -171,11 +181,57 @@ def _check_rules(w, bad):
             for i, e in enumerate(ex):
                 if not isinstance(e, dict) or not isinstance(e.get("medium"), str) or not e.get("medium"):
                     bad.append("expressions[%d].medium must be a non-empty string" % i)
+    _check_forbidden_glossary(w, bad)
     if "version" in w and not (isinstance(w["version"], str) and w["version"]):
         bad.append("version must be a non-empty string")
     fk = w.get("forked_from")
     if fk is not None and not (isinstance(fk, dict) and isinstance(fk.get("world"), str) and fk.get("world")):
         bad.append("forked_from.world must name the parent world")
+
+
+def _check_forbidden_glossary(w, bad):
+    """W-01 forbidden list (what this world never has) and W-05 glossary (the artist's own words, any language)."""
+    fb = w.get("forbidden")
+    if fb is not None:
+        if not isinstance(fb, list):
+            bad.append("forbidden must be a list")
+        else:
+            for i, f in enumerate(fb):
+                p = "forbidden[%d]" % i
+                if not isinstance(f, dict):
+                    bad.append("%s must be an object" % p); continue
+                if f.get("kind") not in FORBIDDEN_KINDS:
+                    bad.append("%s.kind must be one of %s: %s" % (p, "|".join(FORBIDDEN_KINDS), _js(f.get("kind"))))
+                elif not isinstance(f.get("value"), str) or not f["value"].strip():
+                    bad.append("%s.value must be a non-empty string" % p)
+                elif f["kind"] == "colour" and not is_hex(f["value"]):
+                    bad.append('%s.value must be "#rrggbb" for a colour: %s' % (p, _js(f["value"])))
+                if "enabled" in f and not isinstance(f["enabled"], bool):
+                    bad.append("%s.enabled must be true|false" % p)
+    gl = w.get("glossary")
+    if gl is not None:
+        if not isinstance(gl, list):
+            bad.append("glossary must be a list"); return
+        seen = set()
+        for i, g in enumerate(gl):
+            p = "glossary[%d]" % i
+            if not isinstance(g, dict):
+                bad.append("%s must be an object" % p); continue
+            if not isinstance(g.get("term"), str) or not g["term"].strip():
+                bad.append("%s.term must be a non-empty string" % p)
+            elif g["term"] in seen:
+                bad.append('%s.term duplicated: "%s"' % (p, g["term"]))
+            else:
+                seen.add(g["term"])
+            if not isinstance(g.get("meaning"), str) or not g["meaning"].strip():
+                bad.append("%s.meaning must be a non-empty string" % p)
+            if "axes" in g:
+                if not isinstance(g["axes"], dict):
+                    bad.append("%s.axes must be an object" % p)
+                else:
+                    for k, v in g["axes"].items():
+                        if not _num(v) or not 0 <= v <= 1:
+                            bad.append("%s.axes.%s must be a number in [0,1]: %s" % (p, k, _js(v)))
 
 
 TRIGGER_ON = ("tap", "near")
