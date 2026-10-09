@@ -212,7 +212,11 @@ class EditorBrowserTests(unittest.TestCase):
         self.assertFalse(L["stacked"])
 
     def test_phone(self):
-        L = self.check_run(self.run_editor(BAROQUE, 390, 844), 390, 844)
+        res = self.run_editor(BAROQUE, 390, 844)
+        got = res["layout"]["inner"][0]
+        if got != 390:          # full Chromium (not the headless shell) cannot make a window narrower than 500 px
+            self.skipTest("this browser's window cannot be 390 px wide (got %d px) -- phone layout NOT measured here" % got)
+        L = self.check_run(res, 390, 844)
         self.assertTrue(L["stacked"])                                                     # 3D on top, controls below
 
     def test_save_from_editor_becomes_a_studio_version(self):

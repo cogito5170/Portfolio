@@ -2,7 +2,8 @@
 //
 //   {"kind": "standard"|"physical"|"basic", "color": "#rrggbb"|[r,g,b] (sRGB 0..1), "roughness", "metalness",
 //    "emissive", "emissive_intensity", "opacity", "transmission", "ior", "clearcoat", "side": "double",
-//    "texture": {"kind": "speckle"|"wood"|"grid"|"gradient", "colors": [...], "size_m": metres per tile}}
+//    "texture": {"kind": "speckle"|"wood"|"grid"|"gradient", "colors": [...], "size_m": metres per tile},
+//    "image": "asset:<name>" (the artist's own picture, E-02; stretched over each face, not tiled)}
 //
 // The core ships a neutral default set only. Look-and-feel belongs to the world (or to a plugin's theme), not here.
 import * as THREE from 'three';
@@ -56,7 +57,7 @@ function texture(spec) {
   return t;
 }
 
-export function build(spec) {
+export function build(spec, lib = null) {
   spec = spec || {};
   const kind = spec.kind || (spec.transmission || spec.clearcoat ? 'physical' : 'standard');
   const Cls = { standard: THREE.MeshStandardMaterial, physical: THREE.MeshPhysicalMaterial, basic: THREE.MeshBasicMaterial }[kind] || THREE.MeshStandardMaterial;
@@ -77,13 +78,20 @@ export function build(spec) {
     const t = texture(spec.texture);
     if (t) { m.map = t; if (spec.texture.emissive) { m.emissiveMap = t; m.emissive = new THREE.Color(0xffffff); m.emissiveIntensity = spec.emissive_intensity ?? 0.9; } m.userData.size_m = spec.texture.size_m || 0; }
   }
+  if (spec.image && lib && lib.assets) {
+    const url = lib.assets.url(spec.image);
+    if (url) lib.pending.push(new THREE.TextureLoader().loadAsync(url).then(t => {
+      t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+      m.map = t; m.color = new THREE.Color(0xffffff); m.needsUpdate = true; lib.assets.loaded.push(spec.image);
+    }).catch(() => { lib.assets.missing.add(spec.image.slice(6)); }));
+  }
   m.userData.spec = spec;
   return m;
 }
 
 // Library: world materials over plugin themes over core defaults. get(ref) accepts a name or an inline spec.
 export class Library {
-  constructor(worldMaterials = {}) { this.specs = { ...DEFAULTS }; this.world = worldMaterials || {}; this.cache = new Map(); this.missing = new Set(); }
+  constructor(worldMaterials = {}) { this.specs = { ...DEFAULTS }; this.world = worldMaterials || {}; this.cache = new Map(); this.missing = new Set(); this.assets = null; this.pending = []; }
   theme(prefix, specs) { for (const [k, v] of Object.entries(specs)) this.specs[`${prefix}.${k}`] = v; }
   spec(ref) {
     if (ref && typeof ref === 'object') return ref;
@@ -93,9 +101,9 @@ export class Library {
     return DEFAULTS.default;
   }
   get(ref) {
-    if (ref && typeof ref === 'object') return build(ref);
+    if (ref && typeof ref === 'object') return build(ref, this);
     const key = ref ?? 'default';
-    if (!this.cache.has(key)) this.cache.set(key, build(this.spec(key)));
+    if (!this.cache.has(key)) this.cache.set(key, build(this.spec(key), this));
     return this.cache.get(key);
   }
   // A material whose texture tiles every size_m metres over a u x v metre surface.

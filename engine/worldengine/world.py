@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 
 
 def _js(v) -> str:
@@ -87,12 +88,57 @@ def check(w, known_types=None) -> "list[str]":
     _check_rules(w, bad)
     _check_experience(w, bad)
     mode = (w.get("controls") or {}).get("default")
-    if mode is not None and mode not in ("orbit", "walk"):
-        bad.append('controls.default must be orbit|walk: "%s"' % mode)
+    if mode is not None and mode not in CONTROL_MODES:
+        bad.append('controls.default must be %s: "%s"' % ("|".join(CONTROL_MODES), mode))
+    _check_media(w, bad)
     return bad
 
 
 SOURCE_KINDS = ("quote", "paraphrase", "own", "interview")
+CONTROL_MODES = ("orbit", "walk", "fly")
+INPUTS = ("mic", "camera")
+ASSET_RE = re.compile(r"^asset:[\w가-힣][\w가-힣 .()-]{0,120}$", re.ASCII)
+
+
+def is_asset_ref(v) -> bool:
+    """E-02: imported files are named ("asset:<name>"), never linked by URL."""
+    return isinstance(v, str) and ASSET_RE.fullmatch(v) is not None
+
+
+def _check_media(w, bad):
+    """Post-processing (bloom), LOD, imported media references (E-02) and live-input behaviours (M-03)."""
+    env = w.get("environment")
+    if isinstance(env, dict):
+        b = env.get("bloom")
+        if b is not None and b is not False:
+            if not isinstance(b, dict):
+                bad.append("environment.bloom must be an object or false")
+            else:
+                for k, lo, hi in (("strength", 0, 5), ("radius", 0, 1), ("threshold", 0, 1)):
+                    if k in b and not (_num(b[k]) and lo <= b[k] <= hi):
+                        bad.append("environment.bloom.%s must be in [%d,%d]: %s" % (k, lo, hi, _js(b[k])))
+        lod = env.get("lod")
+        if lod is not None and lod is not False and not (isinstance(lod, dict) and ("distance_m" not in lod or (_num(lod["distance_m"]) and lod["distance_m"] > 0))):
+            bad.append("environment.lod must be false or {distance_m > 0}")
+    for name, m in (w.get("materials") or {}).items():
+        if isinstance(m, dict) and "image" in m and not is_asset_ref(m["image"]):
+            bad.append('materials.%s.image must be "asset:<name>": %s' % (name, _js(m["image"])))
+
+    def walk(es, path):
+        for i, e in enumerate(es or []):
+            if not isinstance(e, dict):
+                continue
+            q = "%s[%d]" % (path, i)
+            if "src" in e and not is_asset_ref(e["src"]):
+                bad.append('%s.src must be "asset:<name>" (imported files are named, not linked): %s' % (q, _js(e["src"])))
+            if isinstance(e.get("material"), dict) and "image" in e["material"] and not is_asset_ref(e["material"]["image"]):
+                bad.append('%s.material.image must be "asset:<name>": %s' % (q, _js(e["material"]["image"])))
+            for k, b in enumerate(e.get("behaviors") or []):
+                if isinstance(b, dict) and b.get("type") == "react" and b.get("input") not in INPUTS:
+                    bad.append("%s.behaviors[%d].input must be %s: %s" % (q, k, "|".join(INPUTS), _js(b.get("input"))))
+            if isinstance(e.get("children"), list):
+                walk(e["children"], q + ".children")
+    walk(w.get("entities"), "entities")
 
 
 def _check_concepts(w, ids, bad):

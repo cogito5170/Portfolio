@@ -137,4 +137,106 @@ export const selftests = {
     const s = await xrSupport(); const e = await enableXR(eng);
     return { api: s.api, vr: s.vr, button: !!eng.xrButton, renderer_xr: eng.renderer.xr.enabled, agree: s.vr === e.vr };
   },
+  // XR-01 bloom: mean luminance in a ring just outside the glowing body ("glow"), post-processing off / on / low-spec.
+  async bloom(eng) {
+    const o = eng.find('glow'); if (!o) return { error: 'no entity "glow"' };
+    const sph = new THREE.Box3().setFromObject(o).getBoundingSphere(new THREE.Sphere()), cam = eng.camera;
+    const c = sph.center.clone().project(cam), right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0);
+    const e = sph.center.clone().addScaledVector(right, sph.radius).project(cam);
+    const [W, H] = eng.size, cx = (c.x + 1) / 2 * W, cy = (1 - c.y) / 2 * H, r = Math.hypot((e.x - c.x) / 2 * W, (e.y - c.y) / 2 * H);
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d', { willReadFrequently: true });
+    const ring = () => {
+      eng.step(0); g.drawImage(eng.renderer.domElement, 0, 0); const px = g.getImageData(0, 0, W, H).data;
+      let sum = 0, n = 0;
+      for (let y = Math.max(0, Math.floor(cy - 1.7 * r)); y < Math.min(H, cy + 1.7 * r); y++) for (let x = Math.max(0, Math.floor(cx - 1.7 * r)); x < Math.min(W, cx + 1.7 * r); x++) {
+        const d = Math.hypot(x - cx, y - cy); if (d < 1.25 * r || d > 1.6 * r) continue;
+        const k = 4 * (y * W + x); sum += 0.2126 * px[k] + 0.7152 * px[k + 1] + 0.0722 * px[k + 2]; n++;
+      }
+      return n ? +(sum / n).toFixed(2) : null;
+    };
+    const out = { has_post: !!eng.post, px_radius: +r.toFixed(1) };
+    if (eng.post) eng.post.enabled = false; out.ring_off = ring();
+    if (eng.post) eng.post.enabled = true; out.ring_on = ring();
+    eng.setLowSpec(true); out.ring_lowspec = ring(); eng.setLowSpec(false);
+    return out;
+  },
+  // XR-01 LOD: triangles drawn with the camera near the middle of the world and far away.
+  async lod(eng) {
+    const { min, max } = eng.extent, c = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, 0];
+    const at = d => { eng.camera.position.set(c[0], d * 0.6, -(c[1] - d)); eng.camera.lookAt(c[0], 0, -c[1]); eng.camera.updateMatrixWorld();
+      eng.renderer.render(eng.scene, eng.camera); return eng.renderer.info.render.triangles; };
+    let lods = 0; eng.root.traverse(o => { if (o.isLOD) lods++; });
+    return { lod_on: eng.lodOn, distance: eng.lodDistance, lod_objects: lods, near: at(0.4 * eng.lodDistance), far: at(4 * eng.lodDistance) };
+  },
+  // XR-02 fly: keys W (forward, looking level) then E (up) for 1 s each, through whatever is in the way.
+  async fly(eng) {
+    eng.setMode('fly');
+    const s0 = { ...eng.walk.state }; eng.walk.state = { ...s0, pitch: 0 };
+    const key = (code, down) => dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code }));
+    const a = { ...eng.walk.state }; key('KeyW', true); run(eng, 60); key('KeyW', false);
+    const b = { ...eng.walk.state }; key('KeyE', true); run(eng, 60); key('KeyE', false);
+    const c = { ...eng.walk.state }; key('KeyQ', true); run(eng, 600); key('KeyQ', false);
+    const d = { ...eng.walk.state };
+    eng.setMode('walk'); const w = { ...eng.walk.state };
+    return { forward_m: +Math.hypot(b.x - a.x, b.y - a.y).toFixed(4), forward_dz: +(b.eye - a.eye).toFixed(4), up_m: +(c.eye - b.eye).toFixed(4),
+      floor_m: +d.eye.toFixed(4), walk_eye_after: +w.eye.toFixed(4), eye_height: eng.eyeHeight(), camera_z: +eng.camera.position.y.toFixed(4) };
+  },
+  // T-02 player: works shown, idle -> attract tour (looping), a touch hands control back, fullscreen asked.
+  async player(eng) {
+    const { player } = await import('./player.js');
+    const P = new URLSearchParams(location.search), pl = player(eng, { works: P.get('works'), idle_s: 5 });
+    await pl.ready;
+    const out = { items: pl.items.map(i => ({ title: i.title, ok: i.ok, w: i.img ? i.img.naturalWidth : 0, reason: i.reason || null })) };
+    const t0 = eng.realTime; while (!pl.attract && eng.realTime - t0 < 30) eng.step(0.25, false);
+    out.attract_after_s = +(eng.realTime - t0).toFixed(2); out.touring = !!eng.tour;
+    const t1 = eng.realTime; while (pl.attracts < 2 && eng.realTime - t1 < 600) eng.step(0.25, false);
+    out.attract_loops = pl.attracts; out.cursor_hidden = document.body.classList.contains('we-attract');
+    dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    out.after_touch = { attract: pl.attract, touring: !!eng.tour, orbit: !!(eng.orbit && eng.orbit.enabled) };
+    out.fullscreen = await pl.fullscreen(); out.wake = { supported: pl.wake.supported, held: pl.wake.held, error: pl.wake.error };
+    const big = pl.items.find(i => i.img) ? pl.show(pl.items.find(i => i.img).img.src, 'x') : null;
+    out.big_opens = !!(big && big.isConnected); if (big) big.remove();
+    const r = pl.strip.getBoundingClientRect(); out.strip_inside = r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1 && r.left >= 0;
+    return out;
+  },
+  // E-02 imported files: what this page could read (and did), what it could not, and every request it made for them.
+  async assets(eng) {
+    const m = eng.find('model'), out = { template: eng.assets.template, loaded: eng.assets.loaded, missing: [...eng.assets.missing].sort() };
+    if (m) { m.updateMatrixWorld(true); const sz = new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3());
+      out.model = { loaded: !!m.userData.loaded, size: [+sz.x.toFixed(3), +sz.z.toFixed(3), +sz.y.toFixed(3)], placeholder: m.children.some(c => c.userData.placeholder) }; }
+    let img = null; eng.root.traverse(o => { if (!img && o.material && o.material.userData.spec && o.material.userData.spec.image) img = o.material; });
+    out.image = img ? { has_map: !!img.map, w: img.map && img.map.image ? img.map.image.width : 0 } : null;
+    // Recordings: the real playback path -- the audio unlocks, every sound with a file is fetched, decoded and
+    // started through its panner. (Run live: Chromium's --timeout mode stops timers once audio starts.)
+    if (eng.audio) { eng.audio.unlock(); await Promise.allSettled(eng.audio.pending || []); }
+    out.audio = eng.audio && eng.audio.files ? { ...eng.audio.files, context: eng.audio.ctx && eng.audio.ctx.state } : null;
+    out.requests = performance.getEntriesByType('resource').map(e => decodeURIComponent(new URL(e.name).pathname)).filter(p => p.startsWith('/assets/') || p.startsWith('/api/asset'));
+    out.captions = eng.captionLog.map(c => c.text);
+    return out;
+  },
+  // M-03 live inputs: nothing asked before the visitor turns it on; then levels move, a react body follows, nothing
+  // goes over the network, no media element is added to the page; off stops the devices.
+  async inputs(eng) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms)), net = { fetch: 0, xhr: 0, ws: 0, beacon: 0 };
+    const f0 = window.fetch; window.fetch = (...a) => { net.fetch++; return f0(...a); };
+    const x0 = XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open = function (...a) { net.xhr++; return x0.apply(this, a); };
+    const w0 = WebSocket.prototype.send; WebSocket.prototype.send = function (...a) { net.ws++; return w0.apply(this, a); };
+    if (navigator.sendBeacon) { const b0 = navigator.sendBeacon.bind(navigator); navigator.sendBeacon = (...a) => { net.beacon++; return b0(...a); }; }
+    const out = { wanted: [...eng.inputsWanted], requested_before_enable: eng.inputs ? eng.inputs.requests : null };
+    out.enabled = { mic: await eng.inputs.enable('mic'), camera: await eng.inputs.enable('camera') };
+    const o = eng.find('listener'), max = { mic: 0, camera: 0, scale: 1 }, t0 = performance.now();
+    while (performance.now() - t0 < 4000) {
+      eng.step(1 / 30, false); max.mic = Math.max(max.mic, eng.inputs.levels.mic); max.camera = Math.max(max.camera, eng.inputs.levels.camera);
+      if (o && o.userData.baseScale) max.scale = Math.max(max.scale, o.scale.x / o.userData.baseScale.x);
+      await sleep(33);
+    }
+    const tracks = Object.values(eng.inputs.on).flatMap(d => d.stream.getTracks());
+    out.max = { mic: +max.mic.toFixed(3), camera: +max.camera.toFixed(3), scale: +max.scale.toFixed(3) };
+    out.tracks_on = tracks.map(t => t.kind + ':' + t.readyState);
+    out.network_during_capture = net; out.media_elements_in_page = document.querySelectorAll('video,audio').length;
+    eng.inputs.disable('mic'); eng.inputs.disable('camera'); eng.step(1 / 30, false);
+    out.tracks_after_off = tracks.map(t => t.kind + ':' + t.readyState); out.levels_after_off = { ...eng.inputs.levels };
+    out.scale_after_off = o && o.userData.baseScale ? +(o.scale.x / o.userData.baseScale.x).toFixed(3) : null;
+    return out;
+  },
 };

@@ -10,7 +10,7 @@
 // Every change is one undo step; a slider drag is one step. Export/import is the world JSON itself (W-06).
 // Served by the studio (?studio=1&t=token) the editor saves each state as a new version of the work (E-01, A-05).
 import * as THREE from 'three';
-import { Doc, at, flatten, label, newEntity, duplicate, remove, fieldKind, parseNumList, isHexColour, pathOf, TEMPLATES } from './model.js';
+import { Doc, at, flatten, label, newEntity, duplicate, remove, fieldKind, parseNumList, isHexColour, pathOf, TEMPLATES, uniqueId as uniqueOf } from './model.js';
 import { check, AXES, CONSTRAINT_KINDS, RULE_KINDS, FORBIDDEN_KINDS } from '../world.js';
 import { violations, KO } from '../rules.js';
 import { FROM3 } from '../engine.js';
@@ -34,13 +34,17 @@ function h(tag, attrs = {}, ...kids) {
 }
 const btn = (text, onclick, attrs = {}) => h('button', { type: 'button', onclick, ...attrs }, text);
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? +v.toFixed(4) : '');
+const kindOf = (name, type = '') => /\.glb$/i.test(name) || type === 'model/gltf-binary' ? 'model' : /^image\//.test(type) || /\.(png|jpe?g|webp)$/i.test(name) ? 'image'
+  : /^audio\//.test(type) || /\.(wav|mp3|ogg)$/i.test(name) ? 'audio' : null;
+// An imported file's name as the world will say it ("asset:<name>"): letters, digits, Hangul, space . ( ) -
+export const assetName = n => { let x = String(n).replace(/[^\w가-힣 .()-]+/g, '_').slice(0, 121); if (!/^[\w가-힣]/.test(x)) x = 'f' + x; return x.slice(0, 121); };
 
 export class Editor {
   constructor(eng, world, { studio = null } = {}) {
     this.eng = eng; this.doc = new Doc(world); this.sel = null; this.tab = 'bodies'; this.studio = studio;
     this.known = eng.registry.known();
     this.catalogue = new Map(eng.registry.catalogue().map(c => [c.type, c]));
-    this.errors = []; this.viol = []; this.timer = null; this.lastExport = null; this.armDelete = false;
+    this.errors = []; this.viol = []; this.timer = null; this.lastExport = null; this.armDelete = false; this.imported = [];
     this.panel = document.getElementById('panel'); this.tabs = document.getElementById('tabs');
     const $ = id => document.getElementById(id);
     $('undo').onclick = () => this.undo(); $('redo').onclick = () => this.redo();
@@ -59,7 +63,12 @@ export class Editor {
 
   status(text, cls = '') { const s = this.$('status'); s.textContent = text; s.className = cls; }
 
-  async start() { this.validate(); if (this.errors.length) throw new Error('invalid world: ' + this.errors.slice(0, 3).join('; ')); await this.reload(true); this.render(); }
+  async start() {
+    if (this.studio) try {                                                      // files already in the artist's folder
+      const r = await fetch('/api/assets?t=' + encodeURIComponent(this.studio.token)).then(x => x.json());
+      this.imported = (r.assets || []).map(a => ({ name: a.name, kind: kindOf(a.name, a.media_type) }));
+    } catch (_) { /* the list is a convenience */ }
+    this.validate(); if (this.errors.length) throw new Error('invalid world: ' + this.errors.slice(0, 3).join('; ')); await this.reload(true); this.render(); }
 
   async reload(first = false) {
     clearTimeout(this.timer); this.timer = null;
@@ -179,6 +188,7 @@ export class Editor {
       const c = this.eng.orbit ? FROM3(this.eng.orbit.target) : [0, 0, 0], e = newEntity(w, sel.value, c);
       this.change(x => x.entities.push(e), `${e.id} 추가`); this.select([w.entities.length - 1]);
     }, { k: 'add.go' })));
+    out.push(this.importCard());
     const e = this.selected;
     if (e) out.push(this.entityCard(e));
     else out.push(h('p', { className: 'sub' }, '3D 화면이나 아래 목록에서 몸을 누르면 고칠 수 있어요.'));
@@ -190,6 +200,43 @@ export class Editor {
     }
     out.push(h('h3', {}, `몸 ${flatten(w).length}개`), list);
     return out;
+  }
+
+  // E-02: the artist's own 3D models, pictures and recordings. Studio: into the artist's private folder.
+  // Without the studio: they stay in this browser (object URLs) -- the exported world names them, it never carries them.
+  importCard() {
+    const card = h('div', { className: 'card' }, h('h3', {}, '가져온 파일 — 3D 모델(.glb)·그림·녹음'),
+      h('p', { className: 'sub' }, this.studio ? '작가의 비공개 폴더에만 저장돼요. 승인한 공개 때만, 이 작품이 쓰는 파일만 함께 나가요.'
+        : '이 브라우저에만 있어요 (내보낸 세계 파일에는 이름만 들어가요). 스튜디오에서 열면 작가의 폴더에 남아요.'));
+    const pick = h('input', { type: 'file', multiple: true, accept: '.glb,model/gltf-binary,image/png,image/jpeg,image/webp,audio/*', k: 'imp.file', 'aria-label': '파일 가져오기',
+      onchange: async () => { for (const f of [...pick.files]) await this.importFile(f); pick.value = ''; this.render(); } });
+    card.append(pick);
+    for (const a of this.imported) {
+      const ref = 'asset:' + a.name, sel = this.selected, row = h('div', { className: 'row' }, h('span', { className: 'grow' }, `${a.name} · ${{ model: '3D', image: '그림', audio: '소리' }[a.kind] || '?'}`));
+      const c = this.eng.orbit ? FROM3(this.eng.orbit.target) : [0, 0, 0], at0 = [+c[0].toFixed(2), +c[1].toFixed(2), 0];
+      if (a.kind === 'model') row.append(btn('3D 몸으로 놓기', () => { const id = uniqueOf(this.doc.world, a.name.replace(/\.glb$/i, ''));
+        this.change(w => w.entities.push({ id, type: 'model', src: ref, pos: at0, fit_m: 1.5 }), `${id} 놓기`); this.select([this.doc.world.entities.length - 1]); }, { k: `imp.${a.name}.place` }));
+      if (a.kind === 'image') row.append(btn(sel ? `${label(sel)} 에 입히기` : '몸을 먼저 고르세요', () => {
+        this.change(() => { const x = at(this.doc.world, this.sel); x.material = { color: '#ffffff', image: ref }; }, `${label(sel)} 그림 입힘`); }, { k: `imp.${a.name}.apply`, disabled: !sel }));
+      if (a.kind === 'audio') row.append(btn('소리로 놓기', () => { const id = uniqueOf(this.doc.world, a.name.replace(/\.\w+$/, ''));
+        this.change(w => w.entities.push({ id, type: 'sound', src: ref, caption: a.name.replace(/\.\w+$/, ''), pos: [at0[0], at0[1], 1] }), `${id} 놓기`); }, { k: `imp.${a.name}.place` }));
+      card.append(row);
+    }
+    return card;
+  }
+
+  async importFile(f) {
+    const name = assetName(f.name), kind = kindOf(f.name, f.type);
+    if (!kind) { this.status(`${f.name}: .glb·그림·녹음만 가져와요`, 'bad'); return null; }
+    if (this.studio) {
+      const b = new Uint8Array(await f.arrayBuffer()); let bin = ''; for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
+      const r = await fetch('/api/asset?t=' + encodeURIComponent(this.studio.token), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, data: btoa(bin) }) }).then(x => x.json());
+      if (r.error) { this.status(`${f.name}: ${r.error}`, 'bad'); return null; }
+    } else this.eng.assets.local.set(name, URL.createObjectURL(f));
+    this.imported = [...this.imported.filter(a => a.name !== name), { name, kind }];
+    this.status(`가져왔어요: ${name}`);
+    return name;
   }
 
   entityCard(e) {

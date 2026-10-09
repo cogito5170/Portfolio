@@ -16,6 +16,8 @@ import { AudioManager } from './audio.js';
 import { physics, tourAt } from './physics.js';
 import { Interaction } from './interact.js';
 import { Captions } from './ui/captions.js';
+import { Assets } from './assets.js';
+import { Inputs, inputsUsed } from './inputs.js';
 
 export const T3 = (x, y, z) => new THREE.Vector3(x, z, -y);            // world (z up) -> three (y up)
 export const FROM3 = v => [v.x, -v.z, v.y];
@@ -38,6 +40,7 @@ export class Engine {
     this.camera = new THREE.PerspectiveCamera(50, this.size[0] / this.size[1], 0.05, 5000);
     this.t = 0; this.realTime = 0; this.listeners = {}; this.mode = 'none';
     this.captionLog = []; this.captions = new Captions(container); this.tour = null; this.lowspec = false;
+    this.assets = new Assets(null);                                    // E-02: set .template where imported files may be read
     if (!headless) addEventListener('resize', () => this.resize(innerWidth, innerHeight));
   }
 
@@ -46,7 +49,8 @@ export class Engine {
 
   resize(w, h) {
     this.size = [w, h]; this.renderer.setSize(w, h); this.camera.aspect = w / h;
-    this.camera.fov = fitFov(this.mode === 'walk' ? 70 : (this.views?.[this.viewName]?.fov ?? 50), w / h); this.camera.updateProjectionMatrix();
+    if (this.post) this.post.composer.setSize(w, h);
+    this.camera.fov = fitFov(this.mode === 'walk' || this.mode === 'fly' ? 70 : (this.views?.[this.viewName]?.fov ?? 50), w / h); this.camera.updateProjectionMatrix();
   }
 
   async load(world, { view, mode, eye } = {}) {
@@ -55,6 +59,8 @@ export class Engine {
     if (this.scene) this._dispose(this.scene);          // reloading (the editor does it on every change): free the old GPU objects
     this.world = world; this.mats.world = world.materials || {}; this.mats.cache.clear();
     this.extent = W.extent(world);
+    { const L = (world.environment || {}).lod, { min, max } = this.extent;        // XR-01 level of detail
+      this.lodOn = L !== false; this.lodDistance = (L && L.distance_m) || Math.max(15, 0.35 * Math.max(max[0] - min[0], max[1] - min[1])); }
     this.views = { ...W.defaultViews(world), ...(world.views || {}) };
     this.scene = new THREE.Scene();
     this.root = new THREE.Group(); this.root.rotation.x = -Math.PI / 2; this.scene.add(this.root);
@@ -63,16 +69,21 @@ export class Engine {
     if (!this.audio) this.audio = new AudioManager(this);
     this.audio.sources = [];
     this._environment(world.environment || {});
+    if ((world.environment || {}).bloom) await this._bloom(world.environment.bloom);
     let seed = 12345;
+    this.mats.assets = this.assets; this.mats.pending = [];
     const ctx = { THREE, mats: this.mats, world, view: view || 'aerial', extent: this.extent, engine: this, audio: this.audio,
-                  rnd: () => ((seed = (seed * 16807) % 2147483647) / 2147483647) };
+                  assets: this.assets, pending: [], rnd: () => ((seed = (seed * 16807) % 2147483647) / 2147483647) };
     for (const e of world.entities) this.root.add(this._build(e, ctx, [0, 0, 0]));
+    await Promise.allSettled([...ctx.pending, ...this.mats.pending]);  // imported models and pictures are in before the first frame
     this._solidColliders();
     this.eyeOnly = []; this.root.traverse(o => { if (o.userData.entity && o.userData.entity.eye_only) this.eyeOnly.push(o); });
     this.eyeName = eye || (world.player && world.player.eye) || 'adult';
     this.setView(view && this.views[view] ? view : Object.keys(this.views)[0]);
     this.setMode(mode || (world.controls && world.controls.default) || 'orbit');
     if (!this.interaction) this.interaction = new Interaction(this);
+    this.inputsWanted = inputsUsed(world);                             // M-03: offered (never started) only if the world uses them
+    if (this.inputsWanted.size && !this.inputs) this.inputs = new Inputs(this);
     if (this.mats.missing.size) console.warn('materials not defined, default used:', [...this.mats.missing]);
     this.emit('load', world);
     return this;
@@ -98,7 +109,24 @@ export class Engine {
     L.shadow.bias = -0.0004; L.shadow.radius = 4; s.add(L, L.target); this.sun = L;
   }
 
+  // Glow for emissive and bright metal (XR-01): a world asks for it in environment.bloom. Low-spec mode skips it.
+  async _bloom(b) {
+    const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+      import('three/addons/postprocessing/EffectComposer.js'), import('three/addons/postprocessing/RenderPass.js'),
+      import('three/addons/postprocessing/UnrealBloomPass.js'), import('three/addons/postprocessing/OutputPass.js')]);
+    const c = new EffectComposer(this.renderer); c.setPixelRatio(this.renderer.getPixelRatio()); c.setSize(...this.size);
+    const bp = new UnrealBloomPass(new THREE.Vector2(...this.size), b.strength ?? 0.8, b.radius ?? 0.4, b.threshold ?? 0.85);
+    c.addPass(new RenderPass(this.scene, this.camera)); c.addPass(bp); c.addPass(new OutputPass());
+    this.post = { composer: c, bloom: bp, enabled: true };
+  }
+
+  render() {
+    if (this.post && this.post.enabled && !this.lowspec) this.post.composer.render();
+    else this.renderer.render(this.scene, this.camera);
+  }
+
   _dispose(scene) {
+    if (this.post) { this.post.composer.dispose(); this.post.bloom.dispose(); this.post = null; }
     const tex = new Set();
     scene.traverse(o => {
       if (o.isLight && o.dispose) o.dispose();             // shadow maps
@@ -115,7 +143,12 @@ export class Engine {
     const def = this.registry.types.get(e.type);
     const pos = e.pos || [0, 0, 0], abs = pos.map((v, k) => v + off[k]);
     ctx.collide = (x0, y0, x1, y1, ztop) => this.colliders.push([x0 + abs[0], y0 + abs[1], x1 + abs[0], y1 + abs[1], ztop]);
-    const o = def.build(e, ctx);
+    let o;
+    if (def.lod && this.lodOn) {      // a type that can build itself coarser: full detail near, a quarter of it far away
+      o = new THREE.LOD();
+      o.addLevel(def.build(e, { ...ctx, detail: 1 }), 0);
+      o.addLevel(def.build(e, { ...ctx, detail: 0.25 }), this.lodDistance);
+    } else o = def.build(e, ctx);
     o.position.set(...pos);
     if (e.rot) o.rotation.set(...e.rot.map(d => d * Math.PI / 180));
     if (e.scale !== undefined) o.scale.set(...(typeof e.scale === 'number' ? [e.scale, e.scale, e.scale] : e.scale));
@@ -144,7 +177,7 @@ export class Engine {
     c.fov = fitFov(v.fov, this.size[0] / this.size[1]); c.near = v.near || Math.max(0.05, Math.max(...this.extent.max) / 2000); c.updateProjectionMatrix();
     c.position.copy(T3(...v.pos)); c.lookAt(T3(...v.target));
     if (this.orbit) { this.orbit.target.copy(T3(...v.target)); this.orbit.update(); }
-    if (this.walk && this.mode === 'walk') this._placeWalker(v);
+    if (this.walk && (this.mode === 'walk' || this.mode === 'fly')) this._placeWalker(v);
     this.emit('view', name);
   }
 
@@ -161,31 +194,42 @@ export class Engine {
 
   _placeWalker(v) {
     const pl = this.world.player || {};
-    let x, y, yaw;
+    let x, y, yaw, pitch = -0.08;
     if (pl.spawn && !v) { [x, y] = pl.spawn; yaw = (pl.yaw_deg ?? 90) * Math.PI / 180; }
     else { const p = FROM3(this.camera.position); x = p[0]; y = p[1];
-      const d = new THREE.Vector3(); this.camera.getWorldDirection(d); const dw = FROM3(d); yaw = Math.atan2(dw[1], dw[0]); }
+      const d = new THREE.Vector3(); this.camera.getWorldDirection(d); const dw = FROM3(d); yaw = Math.atan2(dw[1], dw[0]);
+      if (this.mode === 'fly') pitch = Math.max(-1.2, Math.min(1.2, Math.asin(Math.max(-1, Math.min(1, dw[2]))))); }
     const { min, max } = this.extent;
-    x = Math.min(max[0] - 0.3, Math.max(min[0] + 0.3, x)); y = Math.min(max[1] - 0.3, Math.max(min[1] + 0.3, y));
-    this.walk.state = { x, y, yaw, pitch: -0.08, eye: this.eyeHeight() };
+    if (this.mode !== 'fly') { x = Math.min(max[0] - 0.3, Math.max(min[0] + 0.3, x)); y = Math.min(max[1] - 0.3, Math.max(min[1] + 0.3, y)); }
+    this.walk.state = { x, y, yaw, pitch, eye: this.mode === 'fly' ? FROM3(this.camera.position)[2] : this.eyeHeight() };
   }
 
   setMode(mode) {
-    if (this.headless && !this.selftest) { this.mode = mode; if (mode === 'walk') this._walkHeadless(); return; }
-    const dom = this.renderer.domElement;
+    if (this.headless && !this.selftest) { this.mode = mode; if (mode !== 'orbit') this._walkHeadless(); return; }
+    const dom = this.renderer.domElement, prev = this.mode;
     if (!this.orbit) {
       this.orbit = new OrbitControls(this.camera, dom); this.orbit.enableDamping = !this.headless;
       this.orbit.target.copy(T3(...this.views[this.viewName].target)); this.orbit.update();
     }
+    const { min, max } = this.extent, big = Math.max(max[0] - min[0], max[1] - min[1], 4);
     if (!this.walk) {
       this.joystick = new Joystick(this.container);
-      const { min, max } = this.extent;
       this.walk = new WalkControls(dom, this.joystick, { speed: (this.world.player || {}).speed ?? 1.4, colliders: this.colliders,
         bounds: { min: [min[0], min[1]], max: [max[0], max[1]] } });
     }
+    const moving = mode === 'walk' || mode === 'fly';
     this.mode = mode;
-    this.orbit.enabled = mode === 'orbit'; this.walk.enabled = this.joystick.enabled = mode === 'walk';
-    if (mode === 'walk') { this._placeWalker(this.world.player && this.world.player.spawn ? null : this.views[this.viewName]); this.camera.fov = fitFov(70, this.size[0] / this.size[1]); this.camera.updateProjectionMatrix(); }
+    this.orbit.enabled = mode === 'orbit'; this.walk.enabled = this.joystick.enabled = moving;
+    Object.assign(this.walk.opts, mode === 'fly'
+      ? { fly: true, bounds: { min: [min[0] - big / 2, min[1] - big / 2], max: [max[0] + big / 2, max[1] + big / 2] }, z_max: Math.max(30, 3 * max[2] + big) }
+      : { fly: false, colliders: this.colliders, bounds: { min: [min[0], min[1]], max: [max[0], max[1]] } });
+    if (mode === 'walk') {
+      if (prev === 'fly' && this.walk.state) this.walk.state = { ...this.walk.state, eye: this.eyeHeight(), pitch: Math.max(-0.6, Math.min(0.6, this.walk.state.pitch)) };   // land where you were
+      else this._placeWalker(this.world.player && this.world.player.spawn ? null : this.views[this.viewName]);
+    } else if (mode === 'fly') {
+      if (prev !== 'walk' || !this.walk.state) { this._placeWalker(this.views[this.viewName]); this.walk.state.eye = FROM3(this.camera.position)[2]; }
+    }
+    if (moving) { this.camera.fov = fitFov(70, this.size[0] / this.size[1]); this.camera.updateProjectionMatrix(); }
     else this.setView(this.viewName);
     this.emit('mode', mode);
   }
@@ -210,6 +254,7 @@ export class Engine {
       if (o.userData.tick) o.userData.tick(this.t, dt);
       for (const b of o.userData.entity.behaviors || []) { const f = this.registry.behaviors.get(b.type); if (f) f(o, b, this.t, dt, this); }
     }
+    if (this.inputs) this.inputs.update(dt);
     if (this.tour) this._tourStep();
     else if (this.interaction && (!this.headless || this.selftest)) this.interaction.step();
     if (this.audio) this.audio.update(this.camera);
@@ -217,10 +262,10 @@ export class Engine {
       const eye = this.currentEye();
       for (const o of this.eyeOnly) o.visible = o.userData.entity.eye_only === eye;
     }
-    if (this.mode === 'walk' && this.walk) { this.walk.update(dt); if (this.walk.state) this._applyWalk(); }
+    if ((this.mode === 'walk' || this.mode === 'fly') && this.walk) { this.walk.update(dt); if (this.walk.state) this._applyWalk(); }
     else if (this.orbit && this.orbit.enabled) this.orbit.update();
     this.emit('step', dt);
-    if (render) this.renderer.render(this.scene, this.camera);
+    if (render) this.render();
   }
 
   caption(text, obj, seconds) {
@@ -240,18 +285,26 @@ export class Engine {
     this.tour = { tr, t0: this.realTime, shown: -1, start: { pos: p, target: p.map((x, i) => x + dir[i] * 5), fov: this.camera.fov } };
     this.emit('tour', id); return true;
   }
+  stopTour() {            // the visitor takes over (exhibition player): controls back, camera stays where it is
+    if (!this.tour) return false;
+    const id = this.tour.tr.id; this.tour = null;
+    if (this.orbit) { this.orbit.enabled = this.mode === 'orbit'; const d = new THREE.Vector3(); this.camera.getWorldDirection(d); this.orbit.target.copy(this.camera.position).addScaledVector(d, 5); this.orbit.update(); }
+    if (this.walk && this.walk.enabled !== undefined) this.walk.enabled = this.mode === 'walk' || this.mode === 'fly';
+    this.emit('tourStop', id); return true;
+  }
   _tourStep() {
     const T = this.tour, s = tourAt(T.tr.stops, this.realTime - T.t0, T.start);
     this.camera.position.copy(T3(...s.pos)); this.camera.lookAt(T3(...s.target));
     if (s.fov) { this.camera.fov = fitFov(s.fov, this.size[0] / this.size[1]); this.camera.updateProjectionMatrix(); }
     if (s.arrived && s.stop > T.shown) { T.shown = s.stop; this.caption(T.tr.stops[s.stop].caption, null, T.tr.stops[s.stop].dwell_s); }
-    if (s.done) { this.tour = null; this.emit('tourEnd', T.tr.id); if (this.orbit) { this.orbit.enabled = this.mode === 'orbit'; this.orbit.target.copy(T3(...s.target)); } }
+    if (s.done) { this.tour = null; if (this.orbit) { this.orbit.enabled = this.mode === 'orbit'; this.orbit.target.copy(T3(...s.target)); } this.emit('tourEnd', T.tr.id); }   // emit last: a listener may start the next tour
   }
 
-  // Low-spec mode (XR-07): one pixel per pixel, no shadows, no environment reflections, at most 4 point lights.
+  // Low-spec mode (XR-07): one pixel per pixel, no shadows, no environment reflections, at most 4 point lights, no bloom.
   setLowSpec(on = true) {
     this.lowspec = on;
     this.renderer.setPixelRatio(on ? 1 : (this.headless ? 1 : Math.min(2, devicePixelRatio || 1)));
+    if (this.post) this.post.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.renderer.shadowMap.enabled = !on;
     if (this.scene) {
       if (on) { this._env = this.scene.environment; this.scene.environment = null; } else if (this._env) this.scene.environment = this._env;

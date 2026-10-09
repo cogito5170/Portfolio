@@ -1,4 +1,6 @@
-// Boot: ?world=<url> [&view=aerial] [&mode=orbit|walk] [&eye=adult|child] [&headless=1&w=&h=&t=] [&selftest=touch]
+// Boot: ?world=<url> [&view=aerial] [&mode=orbit|walk|fly] [&eye=adult|child] [&headless=1&w=&h=&t=] [&selftest=touch]
+//       [&assets=<url template with {name}>] (where this page may read imported files, E-02)
+//       [&player=1&works=<works.json>] (exhibition player, T-02)
 import { Engine } from './engine.js';
 import { core } from './plugins/core.js';
 import { retail } from './plugins/retail.js';
@@ -18,6 +20,7 @@ try {
   eng.selftest = P.get('selftest');
   eng.registry.use(core, eng.mats).use(retail, eng.mats).use(robot, eng.mats).use(character, eng.mats);
   if (P.get('talk')) eng.talk = new TalkClient(P.get('talk'), eng);
+  if (P.get('assets')) eng.assets.template = P.get('assets');
   const url = P.get('world') || '../worlds/contradiction_garden.world.json';
   const res = await fetch(url);
   if (!res.ok) throw new Error(`world ${url}: HTTP ${res.status}`);
@@ -30,7 +33,7 @@ try {
     report(await selftests[eng.selftest](eng));
   }
   if (HEADLESS) eng.step(+(P.get('t') || 0));
-  else { hud(eng); guide(eng); enableXR(eng).then(x => { eng.xr = x; }); if (P.has('perf')) perf(eng, performance.now()); eng.start({ autoLowSpec: !P.has('lowspec') }); }
+  else { if (P.has('player')) (await import('./player.js')).player(eng, { works: P.get('works') }); hud(eng); guide(eng); enableXR(eng).then(x => { eng.xr = x; }); if (P.has('perf')) perf(eng, performance.now()); eng.start({ autoLowSpec: !P.has('lowspec') }); }
   window.__done = true; console.log(`WE_VIEWPORT:${innerWidth},${innerHeight}`); say('done');
 } catch (e) {
   window.__err = String((e && e.message) || e); say('err:' + window.__err);

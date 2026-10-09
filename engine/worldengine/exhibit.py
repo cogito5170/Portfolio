@@ -13,7 +13,7 @@ import mimetypes
 import threading
 import time
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from worldengine import character as CH
 
@@ -23,7 +23,20 @@ RATE = (20, 60.0)                 # requests per window (s) per address
 
 
 def make_handler(world: dict, talk: "CH.Talk | None", room=None):
+    """Serves the runtime, the world, its generated works (T-02 player) and, if configured, talk and presence.
+    It has NO route for imported files (E-02): an exhibited world names them; only an approved publish copies them."""
     hits, lock = {}, threading.Lock()
+    works, wlock = {}, threading.Lock()                  # generated once, on the first player request
+
+    def made():
+        with wlock:
+            if "items" not in works:
+                from worldengine import works as WK
+                items = WK.render(world)
+                works["items"] = items
+                works["files"] = {"%d_%s.%s" % (it["index"], it["plugin"], WK.EXT.get(it["media_type"], "bin")): it for it in items if it["ok"]}
+                works["index"] = WK.index(items, lambda it: "/works/%d_%s.%s" % (it["index"], it["plugin"], WK.EXT.get(it["media_type"], "bin")))
+        return works
     world_bytes = json.dumps(world, ensure_ascii=False).encode("utf-8")
 
     class H(http.server.BaseHTTPRequestHandler):
@@ -42,9 +55,15 @@ def make_handler(world: dict, talk: "CH.Talk | None", room=None):
                 return presence.upgrade(self, room)
             if not parts:
                 self.send_response(302); self.send_header("Location", "/runtime/index.html?world=/world.json" + ("&talk=/api/talk" if talk else "")
-                                                         + ("&presence=/ws" if room is not None else "")); self.end_headers(); return
+                                                         + ("&presence=/ws" if room is not None else "") + "&works=/works.json"
+                                                         + ("&player=1" if "player" in parse_qs(urlparse(self.path).query) else "")); self.end_headers(); return
             if parts == ["world.json"]:
                 return self._send(200, world_bytes)
+            if parts == ["works.json"]:
+                return self._send(200, made()["index"])
+            if len(parts) == 2 and parts[0] == "works" and parts[1] in made()["files"]:
+                it = works["files"][parts[1]]
+                return self._send(200, it["artifact"].encode("utf-8") if isinstance(it["artifact"], str) else it["artifact"], it["media_type"])
             if parts[0] in STATIC:
                 base = STATIC[parts[0]].resolve(); f = (STATIC[parts[0]] / "/".join(parts[1:])).resolve()
                 if base in f.parents and f.is_file() and "tests" not in f.relative_to(base).parts:
@@ -84,6 +103,7 @@ def serve(world: dict, host="127.0.0.1", port=8200, presence: bool = True):
     print("전시: http://%s:%d/" % ("localhost" if host == "127.0.0.1" else host, port))
     print("캐릭터:", "실시간 대답" if talk else "대본 대사만 — " + why)
     print("함께 보기:", "켜짐 (/ws, 익명, 기록 없음)" if room else "꺼짐")
+    print("전시 모드(전체 화면·그림·자동 투어): http://%s:%d/?player=1" % ("localhost" if host == "127.0.0.1" else host, port))
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

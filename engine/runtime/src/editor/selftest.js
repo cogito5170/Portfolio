@@ -135,3 +135,29 @@ export async function editorSaveTest(ed) {
   while (performance.now() - t0 < 8000 && !/판 \d+|못 했어요|않았어요/.test(st.textContent)) await new Promise(r => setTimeout(r, 50));
   return { status: st.textContent, save_visible: !document.getElementById('save').hidden, texture: ed.doc.world.rules.axes.texture };
 }
+
+// E-02 without the studio: files picked in this browser stay here. The test fetches its fixture bytes from the
+// harness, hands them to the editor's own file input as the artist's files, places them, and exports the world.
+export async function editorImportTest(ed, eng) {
+  const files = [];
+  for (const [src, name, type] of [['/assets/box.glb', '의자 (2).glb', 'model/gltf-binary'], ['/assets/pic.png', 'wall pic.png', 'image/png'], ['/assets/tone.wav', 'rain.wav', 'audio/wav']])
+    files.push(new File([await fetch(src).then(r => r.blob())], name, { type }));
+  const input = q('imp.file'), dt = new DataTransfer(); for (const f of files) dt.items.add(f);
+  input.files = dt.files; fire(input, 'change');
+  const t0 = performance.now(); while (ed.imported.length < 3 && performance.now() - t0 < 5000) await new Promise(r => setTimeout(r, 50));
+  const out = { imported: ed.imported, local_urls: [...eng.assets.local.values()].map(u => u.slice(0, 5)) };
+  click('imp.의자 (2).glb.place'); await ed.flush();
+  const model = flatten(ed.doc.world).find(x => x.e.type === 'model');
+  const mo = model && eng.find(model.e.id);
+  out.model = model ? { src: model.e.src, loaded: !!(mo && mo.userData.loaded) } : null;
+  const box = flatten(ed.doc.world).find(x => x.e.type === 'box'); ed.select(box.path);
+  click('imp.wall pic.png.apply'); await ed.flush();
+  let map = null; eng.root.traverse(o => { if (o.userData.entity === at(ed.doc.world, box.path) && o.material && o.material.map) map = o.material.map; });
+  out.image = { material: at(ed.doc.world, box.path).material, has_map: !!map };
+  click('imp.rain.wav.place');
+  out.sound = flatten(ed.doc.world).filter(x => x.e.type === 'sound' && x.e.src).map(x => x.e.src);
+  ed.lastExport = null; document.getElementById('export').click();
+  out.export_bytes = ed.lastExport.length; out.export_has_blob = /blob:|data:|base64/.test(ed.lastExport);
+  out.exported = JSON.parse(ed.lastExport);
+  return out;
+}

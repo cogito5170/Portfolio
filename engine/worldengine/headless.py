@@ -30,7 +30,9 @@ import socketserver
 import subprocess
 import tempfile
 import threading
+import time
 from pathlib import Path
+from urllib.parse import quote
 
 VENDORED_THREE = Path(__file__).resolve().parent.parent / "vendor" / "three"
 RUNTIME = Path(__file__).resolve().parent.parent / "runtime"
@@ -113,9 +115,13 @@ def render(html_path, png_path, view: str = "aerial", w: int = 1600, h: int = 10
 
 def render_world(world, png_path, view: str = "aerial", w: int = 1280, h: int = 800, mode: str = "orbit",
                  eye: "str | None" = None, t: float = 0.0, selftest: "str | None" = None, timeout_s: float = 240.0,
-                 query: "dict | None" = None, page: str = "index.html") -> dict:
+                 query: "dict | None" = None, page: str = "index.html", assets: "dict | None" = None,
+                 real_time_s: "float | None" = None, live: bool = False, fake_media: bool = False) -> dict:
     """A world (dict or path to world JSON) through the modular runtime (engine/runtime). Same honesty rules.
     page="editor.html" opens the same world in the world editor instead of the visitor runtime.
+    assets={name: bytes}: imported files this page may read (E-02), served at /assets/<name>.
+    real_time_s: run on the wall clock for that long (see render_url) instead of virtual time.
+    live=True: run on the wall clock until the page reports, without a screenshot (see run_live).
 
     With selftest=<name>, the page runs that in-browser test and its measurements come back as r["result"]."""
     ok, why = available()
@@ -128,6 +134,11 @@ def render_world(world, png_path, view: str = "aerial", w: int = 1280, h: int = 
         os.symlink(os.path.abspath(_three_dir()), tmp / "vendor" / "three")
         data = world if isinstance(world, dict) else json.loads(Path(world).read_text(encoding="utf-8"))
         (tmp / "world.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        if assets:
+            (tmp / "assets").mkdir()
+            for n, b in assets.items():
+                (tmp / "assets" / n).write_bytes(b)
+            query = {**(query or {}), "assets": quote("/assets/{name}", safe="")}
         q = "runtime/%s?world=/world.json&view=%s&mode=%s&w=%d&h=%d&t=%g&headless=1" % (page, view, mode, w, h, t)
         if eye:
             q += "&eye=" + eye
@@ -135,33 +146,93 @@ def render_world(world, png_path, view: str = "aerial", w: int = 1280, h: int = 
             q += "&selftest=" + selftest
         for k, v in (query or {}).items():
             q += "&%s=%s" % (k, v)
-        return _shoot(tmp, q, png_path, w, h, timeout_s)
+        if live:
+            handler = functools.partial(_Quiet, directory=str(tmp))
+            with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as srv:
+                threading.Thread(target=srv.serve_forever, daemon=True).start()
+                try:
+                    return run_live("http://127.0.0.1:%d/%s" % (srv.server_address[1], q), timeout_s, w, h, fake_media)
+                finally:
+                    srv.shutdown()
+        return _shoot(tmp, q, png_path, w, h, timeout_s, real_time_s)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def render_url(url: str, png_path, w: int = 640, h: int = 400, timeout_s: float = 120, real_time_s: "float | None" = None) -> dict:
+FAKE_MEDIA = ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"]
+
+
+def render_url(url: str, png_path, w: int = 640, h: int = 400, timeout_s: float = 120, real_time_s: "float | None" = None,
+               fake_media: bool = False) -> dict:
     """A page already served elsewhere (e.g. the exhibit server), same honesty rules and self-test results.
     real_time_s: let the page run on the wall clock for that long instead of Chromium's virtual time (needed when
-    the page waits for real network messages, e.g. WebSocket presence -- virtual time would skip the wait)."""
+    the page waits for real network messages, e.g. WebSocket presence -- virtual time would skip the wait).
+    fake_media: Chromium's own fake camera and microphone, permission granted (tests of opt-in live inputs, M-03)."""
     ok, why = available()
     if not ok:
         return {"ok": False, "backend": "없음", "reason": why}
+    extra = FAKE_MEDIA if fake_media else []
     if _has_playwright():
-        return _render_playwright(url, png_path, w, h, timeout_s)
-    return _render_cli(url, png_path, w, h, timeout_s, real_time_s)
+        return _render_playwright(url, png_path, w, h, timeout_s, extra)
+    return _render_cli(url, png_path, w, h, timeout_s, real_time_s, extra)
 
 
-def _shoot(root: Path, rel_url: str, png_path, w, h, timeout_s) -> dict:
+def run_live(url: str, timeout_s: float = 60, w: int = 640, h: int = 400, fake_media: bool = False) -> dict:
+    """The page on the wall clock until it reports WE_STATUS, then the browser is stopped. No screenshot.
+    Why: in Chromium's own --timeout mode the page's timers stop once a camera, microphone or audio stream starts
+    (measured: a 300 ms setInterval never fires again after getUserMedia), and virtual time never resolves audio
+    decoding. Live inputs and recordings are tested this way."""
+    ok, why = available()
+    if not ok:
+        return {"ok": False, "backend": "없음", "reason": why}
+    import signal
+    cmd = [_chromium(), "--headless=new", "--no-sandbox", "--hide-scrollbars", *_ARGS, *(FAKE_MEDIA if fake_media else []),
+           "--enable-logging=stderr", "--v=0", "--window-size=%d,%d" % (w, h), "--remote-debugging-port=0", url]
+    p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, start_new_session=True)
+    lines, t0 = [], time.monotonic()
+    reader = threading.Thread(target=lambda: [lines.append(x) for x in p.stderr], daemon=True)
+    reader.start()
+    try:
+        while time.monotonic() - t0 < timeout_s and not any("WE_STATUS:" in x for x in lines) and p.poll() is None:
+            time.sleep(0.05)
+        time.sleep(0.3)                                   # let the last console lines arrive
+    finally:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        p.wait(timeout=10)
+        reader.join(timeout=5)
+        p.stderr.close()
+    err = "".join(lines)
+    status = re.findall(r'WE_STATUS:(.*?)", source:', err)
+    if not status:
+        return {"ok": False, "backend": "없음", "reason": "페이지가 %ds 안에 완료 신호를 보내지 않았다 (live)" % timeout_s}
+    if status[0].startswith("err:"):
+        return {"ok": False, "backend": "없음", "reason": "페이지 오류: %s" % status[0][4:200]}
+    r = {"ok": True, "backend": "three.js r170 · headless chromium (live)", "reason": ""}
+    res = re.findall(r'WE_RESULT:([A-Za-z0-9+/=]+)"', err)
+    parts = re.findall(r'WE_RESULT_PART:(\d+)/(\d+):([A-Za-z0-9+/=]+)"', err)
+    if parts:
+        n = int(parts[0][1]); got = {int(i): d for i, _, d in parts}
+        if sorted(got) != list(range(n)):
+            return {"ok": False, "backend": "없음", "reason": "결과 조각이 빠졌다 (%d/%d)" % (len(got), n)}
+        res = ["".join(got[i] for i in range(n))]
+    if res:
+        r["result"] = json.loads(base64.b64decode(res[0]).decode("utf-8"))
+    return r
+
+
+def _shoot(root: Path, rel_url: str, png_path, w, h, timeout_s, real_time_s=None) -> dict:
     handler = functools.partial(_Quiet, directory=str(root))
-    with socketserver.TCPServer(("127.0.0.1", 0), handler) as srv:
+    with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as srv:      # parallel requests: matters on the wall clock
         port = srv.server_address[1]
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         url = "http://127.0.0.1:%d/%s" % (port, rel_url)
         try:
             if _has_playwright():
                 return _render_playwright(url, png_path, w, h, timeout_s)
-            return _render_cli(url, png_path, w, h, timeout_s)
+            return _render_cli(url, png_path, w, h, timeout_s, real_time_s)
         finally:
             srv.shutdown()
 
@@ -169,11 +240,11 @@ def _shoot(root: Path, rel_url: str, png_path, w, h, timeout_s) -> dict:
 _ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
 
 
-def _render_playwright(url, png_path, w, h, timeout_s) -> dict:
+def _render_playwright(url, png_path, w, h, timeout_s, extra=()) -> dict:
     from playwright.sync_api import sync_playwright
     try:
         with sync_playwright() as pw:
-            kw = {"args": list(_ARGS)}
+            kw = {"args": list(_ARGS) + list(extra)}
             if _chromium():
                 kw["executable_path"] = _chromium()
             b = pw.chromium.launch(**kw)
@@ -203,17 +274,17 @@ def _render_playwright(url, png_path, w, h, timeout_s) -> dict:
 _VIEWPORT_PAD: "dict[str, tuple[int, int]]" = {}   # per browser binary: window size minus viewport size, measured
 
 
-def _render_cli(url, png_path, w, h, timeout_s, real_time_s=None) -> dict:
+def _render_cli(url, png_path, w, h, timeout_s, real_time_s=None, extra=()) -> dict:
     """The full browser in --headless=new gives the page a viewport smaller than --window-size but screenshots
     the whole window, which leaves a flat band at the bottom. The page reports its viewport (WE_VIEWPORT); if it
     is short, shoot again with the window enlarged by the difference and crop to w x h. headless_shell needs no pad."""
     exe = _chromium()
     pad = _VIEWPORT_PAD.get(exe, (0, 0))
-    r = _cli_once(exe, url, png_path, w + pad[0], h + pad[1], timeout_s, real_time_s)
+    r = _cli_once(exe, url, png_path, w + pad[0], h + pad[1], timeout_s, real_time_s, extra)
     vp = r.get("_viewport")
     if r["ok"] and vp and (vp[0] < w or vp[1] < h):                 # short viewport: enlarge the window once
         _VIEWPORT_PAD[exe] = pad = (pad[0] + max(0, w - vp[0]), pad[1] + max(0, h - vp[1]))
-        r = _cli_once(exe, url, png_path, w + pad[0], h + pad[1], timeout_s, real_time_s)
+        r = _cli_once(exe, url, png_path, w + pad[0], h + pad[1], timeout_s, real_time_s, extra)
         vp = r.get("_viewport")
         if r["ok"] and vp and (vp[0] < w or vp[1] < h):
             return {"ok": False, "backend": "없음", "reason": "뷰포트를 %dx%d 로 맞추지 못했다 (%s)" % (w, h, vp)}
@@ -227,12 +298,12 @@ def _render_cli(url, png_path, w, h, timeout_s, real_time_s=None) -> dict:
     return r
 
 
-def _cli_once(exe, url, png_path, ww, wh, timeout_s, real_time_s=None) -> dict:
+def _cli_once(exe, url, png_path, ww, wh, timeout_s, real_time_s=None, extra=()) -> dict:
     Path(png_path).parent.mkdir(parents=True, exist_ok=True)
     out = Path(png_path).resolve()
     if out.exists():
         out.unlink()
-    cmd = [exe, "--headless=new", "--no-sandbox", "--hide-scrollbars", *_ARGS,
+    cmd = [exe, "--headless=new", "--no-sandbox", "--hide-scrollbars", *_ARGS, *extra,
            "--enable-logging=stderr", "--v=0", "--window-size=%d,%d" % (ww, wh),
            ("--timeout=%d" % int(real_time_s * 1000)) if real_time_s else ("--virtual-time-budget=%d" % int(min(timeout_s, 60) * 1000)),
            "--screenshot=%s" % out, url]

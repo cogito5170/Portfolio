@@ -14,6 +14,8 @@ Routes (all /api routes need the random token printed at start, ?t=... or X-Stud
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import copy
 import http.server
 import json
@@ -22,7 +24,7 @@ import secrets
 import shutil
 import threading
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from worldengine import headless
 from worldengine.studio import agent as AG, board as BD, config, diff as DF, session as SS, vocab as VC
@@ -46,7 +48,8 @@ def executors(out_dir: Path) -> dict:
         tmp_worlds = out_dir / "publish_src"
         tmp_worlds.mkdir(parents=True, exist_ok=True)
         (tmp_worlds / "work.world.json").write_text(json.dumps(s.world, ensure_ascii=False), encoding="utf-8")
-        r = site.build(dest, world_files=[tmp_worlds / "work.world.json"])
+        from worldengine import assets as AS
+        r = site.build(dest, world_files=[tmp_worlds / "work.world.json"], assets=AS.Store(out_dir.parent))     # only the files this work uses
         return {"built": r["out"], "deployed": False, "reason": "폴더만 만들었다. 인터넷 배포는 저장소 주인의 Pages 스위치가 필요하다"}
 
     def delete_work(s, args):
@@ -149,6 +152,13 @@ def make_handler(st: Studio):
                 if parts[1:] == ["world.json"]:
                     pid = q.get("proposal", [None])[0]
                     return self._send(200, st.session.proposals[pid]["world"] if pid in st.session.proposals else st.session.versions[-1]["world"])
+                if len(parts) == 3 and parts[1] == "asset":                 # E-02: the artist's own files, to the artist's pages only
+                    from worldengine import assets as AS
+                    got = AS.Store(st.data).get(unquote(parts[2]))
+                    return self._send(200, got[0], got[1]) if got else self._send(404, {"error": "no such file"})
+                if parts[1:] == ["assets"]:
+                    from worldengine import assets as AS
+                    return self._send(200, {"assets": AS.Store(st.data).names()})
                 if len(parts) == 3 and parts[1] == "board":
                     return self._send(200, BD.build(st.session, parts[2], render=True), "text/html; charset=utf-8")
             return self._send(404, {"error": "not found"})
@@ -168,6 +178,9 @@ def make_handler(st: Studio):
                         return self._send(200, st.message(body))
                     if act == "apply":
                         return self._send(200, st.apply(body))
+                    if act == "asset":                                       # E-02: import into the private folder
+                        from worldengine import assets as AS
+                        return self._send(200, AS.Store(st.data).put(str(body.get("name", "")), base64.b64decode(body.get("data", ""), validate=True)))
                     if act == "edit":                                        # E-01: the editor's direct changes
                         return self._send(200, st.session.edit(body["world"], str(body.get("why", ""))[:200]))
                     if act == "reject":
@@ -176,7 +189,7 @@ def make_handler(st: Studio):
                         return self._send(200, st.session.approve(body["approval"]))
                     if act == "decline":
                         st.session.decline(body["approval"]); return self._send(200, {"ok": True})
-            except (KeyError, ValueError) as e:
+            except (KeyError, ValueError, binascii.Error) as e:
                 return self._send(400, {"error": str(e)})
             return self._send(404, {"error": "not found"})
     return H

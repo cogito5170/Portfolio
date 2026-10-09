@@ -15,7 +15,7 @@ test('check reports every problem and does not modify the world', () => {
   const fx = JSON.parse(readFileSync(new URL('./fixtures_check.json', import.meta.url)));
   const w = fx[1].world, before = JSON.stringify(w), bad = check(w);
   assert.equal(JSON.stringify(w), before);
-  for (const frag of ['format', 'name', 'bounds', 'pos', 'type must be', 'duplicated', 'rot', 'scale', '"nope"', 'children', 'views.bad', 'spawn', 'giant', 'fly'])
+  for (const frag of ['format', 'name', 'bounds', 'pos', 'type must be', 'duplicated', 'rot', 'scale', '"nope"', 'children', 'views.bad', 'spawn', 'giant', 'swim'])
     assert.ok(bad.some(b => b.includes(frag)), `missing: ${frag}\n${bad.join('\n')}`);
 });
 
@@ -68,4 +68,21 @@ test('joystick: dead zone, up is forward, saturates at 1', () => {
   const v = vector(0, -56, 56); close(v.x, 0); close(v.y, 1);
   const f = vector(0, -500, 56); close(Math.hypot(f.x, f.y), 1);
   const h = vector(28, 0, 56); close(h.x, (0.5 - 0.12) / 0.88); close(h.y, 0);
+});
+
+test('fly (XR-02): forward follows the gaze, up/down is vertical, nothing blocks, the eye stays in range', async () => {
+  const { step } = await import('../src/controls/walk.js');
+  const wall = [[0.5, -5, 1, 5, 3]], opts = { fly: true, fly_speed: 4, colliders: wall, z_max: 20, bounds: { min: [-10, -10], max: [10, 10] } };
+  const s0 = { x: 0, y: 0, yaw: 0, pitch: 0, eye: 2 };
+  let s = s0; for (let i = 0; i < 60; i++) s = step(s, { fwd: 1 }, 1 / 60, opts);
+  assert.ok(Math.abs(s.x - 4) < 1e-9 && Math.abs(s.eye - 2) < 1e-9, 'level flight: 4 m forward, through the wall');
+  s = s0; for (let i = 0; i < 60; i++) s = step(s, { up: 1 }, 1 / 60, opts);
+  assert.ok(Math.abs(s.eye - 6) < 1e-9 && s.x === 0, 'up: 4 m straight up');
+  s = { ...s0, pitch: Math.PI / 6 }; for (let i = 0; i < 60; i++) s = step(s, { fwd: 1 }, 1 / 60, opts);
+  assert.ok(Math.abs(s.eye - 4) < 1e-9 && Math.abs(s.x - 4 * Math.cos(Math.PI / 6)) < 1e-9, 'looking up 30 deg: climbs');
+  s = s0; for (let i = 0; i < 600; i++) s = step(s, { up: -1 }, 1 / 60, opts); assert.equal(s.eye, 0.3);
+  s = s0; for (let i = 0; i < 600; i++) s = step(s, { up: 1 }, 1 / 60, opts); assert.equal(s.eye, 20);
+  s = s0; for (let i = 0; i < 600; i++) s = step(s, { fwd: 1 }, 1 / 60, opts); assert.equal(s.x, 10);
+  let w = s0; for (let i = 0; i < 60; i++) w = step(w, { fwd: 1 }, 1 / 60, { speed: 1.4, colliders: wall });   // walking still stops at the wall
+  assert.ok(w.x < 0.5 - 0.25 + 1e-9 && w.x > 0.2, `walk is blocked at the wall: ${w.x}`);
 });
